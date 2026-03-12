@@ -46,7 +46,7 @@
           <div class="kpi-grid">
             <div class="kpi-card"><span class="kpi-icon">📦</span><div class="kpi-value color-blue"  id="kpi-products">—</div><div class="kpi-label">Total Products</div></div>
             <div class="kpi-card"><span class="kpi-icon">💰</span><div class="kpi-value color-green" id="kpi-sales">—</div><div class="kpi-label">Today's Sales</div></div>
-            <div class="kpi-card"><span class="kpi-icon">↩️</span><div class="kpi-value color-amber" id="kpi-returns">—</div><div class="kpi-label">Pending Returns</div></div>
+            <div class="kpi-card"><span class="kpi-icon">↩️</span><div class="kpi-value color-amber" id="kpi-returns">—</div><div class="kpi-label">Total Returns</div></div>
             <div class="kpi-card"><span class="kpi-icon">⚠️</span><div class="kpi-value color-red"   id="kpi-lowstock">—</div><div class="kpi-label">Low Stock Items</div></div>
           </div>
 
@@ -93,41 +93,52 @@
 
   // ── Fetch & Render ────────────────────────────────────────────
   async function loadDashboard() {
+
     // KPI: total products
-    const { count: totalProducts } = await db.from('product').select('*', { count: 'exact', head: true });
+    const { count: totalProducts } = await db
+      .from('product')
+      .select('*', { count: 'exact', head: true });
 
-    // KPI: today's sales
+    // KPI: today's sales — match any sale_date that starts with today's date string
+    // This handles both plain date "2026-03-12" and timestamp "2026-03-12T..."
     const todayStr = new Date().toISOString().split('T')[0];
-    const { data: todaySales } = await db.from('sale').select('total_amount').eq('sale_date', todayStr);
-    const todayTotal = (todaySales || []).reduce((s, r) => s + parseFloat(r.total_amount), 0);
+    const { data: todaySales } = await db
+      .from('sale')
+      .select('total_amount')
+      .gte('sale_date', todayStr)
+      .lte('sale_date', todayStr + 'T23:59:59.999Z');
+    const todayTotal = (todaySales || []).reduce((s, r) => s + parseFloat(r.total_amount || 0), 0);
 
-    // KPI: pending returns
-    const { count: pendingReturns } = await db.from('return').select('*', { count: 'exact', head: true });
+    // KPI: total returns count
+    const { count: totalReturns } = await db
+      .from('return')
+      .select('*', { count: 'exact', head: true });
 
-    // KPI: low stock
-    const { data: allProducts } = await db.from('product').select('quantity, reorder_level');
+    // KPI: low stock — fetch ALL products and count those at or below reorder level
+    const { data: allProducts } = await db
+      .from('product')
+      .select('quantity, reorder_level, product_name');
     const lowStockCount = (allProducts || []).filter(p => p.quantity <= p.reorder_level).length;
 
     document.getElementById('kpi-products').textContent = (totalProducts || 0).toLocaleString();
     document.getElementById('kpi-sales').textContent    = peso(todayTotal);
-    document.getElementById('kpi-returns').textContent  = pendingReturns || 0;
+    document.getElementById('kpi-returns').textContent  = totalReturns || 0;
     document.getElementById('kpi-lowstock').textContent = lowStockCount;
 
-    // Low Stock List
-    const { data: lowStock } = await db.from('product')
-      .select('product_name, quantity, reorder_level')
-      .order('quantity', { ascending: true })
-      .limit(10);
-
-    const lowItems = (lowStock || []).filter(p => p.quantity <= p.reorder_level);
+    // Low Stock List — all low stock items sorted by most critical first
+    const lowItems = (allProducts || [])
+      .filter(p => p.quantity <= p.reorder_level)
+      .sort((a, b) => a.quantity - b.quantity)
+      .slice(0, 10);
     renderLowStock(lowItems);
 
-    // Recent Sales
-    const { data: sales } = await db.from('sale')
-      .select('total_amount, sale_date, customer(full_name)')
+    // Recent Sales — fetch latest 8 sales ordered by sale_date descending
+    const { data: sales } = await db
+      .from('sale')
+      .select('sale_id, total_amount, sale_date, customer(full_name)')
       .order('sale_date', { ascending: false })
+      .order('sale_id',   { ascending: false })
       .limit(8);
-
     renderSales(sales || []);
   }
 
@@ -229,10 +240,10 @@
 
     document.getElementById('modal-form').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const sale_date   = document.getElementById('f-date').value;
-      const customer_id = parseInt(document.getElementById('f-customer').value);
-      const employee_id = parseInt(document.getElementById('f-employee').value);
-      const total_amount= parseFloat(document.getElementById('f-total').value);
+      const sale_date    = document.getElementById('f-date').value;
+      const customer_id  = parseInt(document.getElementById('f-customer').value);
+      const employee_id  = parseInt(document.getElementById('f-employee').value);
+      const total_amount = parseFloat(document.getElementById('f-total').value);
 
       if (isNaN(total_amount)) { showToast('Please fill all fields.', 'error'); return; }
 
