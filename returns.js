@@ -7,7 +7,7 @@
   const SIDEBAR = `
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="logo-title">⚙️ STOCK<span class="logo-accent">PILOT</span></div>
+        <div class="logo-title">⚙️ Joe Hardware<span class="logo-accent">and Motorparts</span></div>
         <div class="logo-sub">Hardware &amp; Motor Parts</div>
       </div>
       <nav class="sidebar-nav">
