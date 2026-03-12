@@ -648,3 +648,21 @@ td.td-muted { color: var(--text-muted); }
   .main    { margin-left: 0; padding: 20px; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- Row Action Buttons ---------- */
+.btn-action {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.btn-action:hover { transform: scale(1.1); }
+.btn-edit-row:hover   { background: rgba(59,125,216,0.15); border-color: var(--blue); }
+.btn-delete-row:hover { background: rgba(212,43,43,0.18);  border-color: var(--red);  }
