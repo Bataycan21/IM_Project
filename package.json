@@ -1,14 +1,15 @@
 {
-  "name": "your-project",
+  "name": "im_project",
   "version": "1.0.0",
+  "description": "StockPilot Inventory Management",
+  "main": "dashboard.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "dev": "npx live-server",
+    "build": "echo 'No build needed'",
+    "start": "npx live-server",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
-  }
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
