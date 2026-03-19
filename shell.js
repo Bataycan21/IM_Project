@@ -70,15 +70,33 @@ const NAV_ITEMS = [
 ];
 
 function renderShell(activeId) {
-  // Get current user from auth.js
+  // Read logged-in user from auth.js session
   const currentUser = Auth.getUser();
 
-  const navHTML = NAV_ITEMS.map(item => `
-    <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
-      ${item.icon}
-      <span class="nav-label">${item.label}</span>
-    </a>
-  `).join('');
+  // Cashier cannot access Stock Out, Reports, Settings
+  const MANAGER_ONLY = ['stockouts', 'reports', 'settings'];
+  const isManager = currentUser.role === 'Manager';
+
+  // Block direct URL access for Cashiers
+  if (!isManager && MANAGER_ONLY.includes(activeId)) {
+    document.getElementById('app').innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg);flex-direction:column;gap:16px;">
+        <div style="font-size:40px;">🔒</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:1px;">Access Restricted</div>
+        <div style="font-size:13px;color:var(--text-muted);">You don't have permission to view this page.</div>
+        <a href="dashboard.html" style="margin-top:8px;padding:10px 24px;background:var(--amber);color:#000;border-radius:7px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:800;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Go to Dashboard</a>
+      </div>`;
+    return;
+  }
+
+  const navHTML = NAV_ITEMS
+    .filter(item => isManager || !MANAGER_ONLY.includes(item.id))
+    .map(item => `
+      <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
+        ${item.icon}
+        <span class="nav-label">${item.label}</span>
+      </a>
+    `).join('');
 
   document.getElementById('app').innerHTML = `
     <div class="app-shell">
@@ -97,20 +115,6 @@ function renderShell(activeId) {
         </a>
 
         <nav class="sidebar-nav">${navHTML}</nav>
-
-        <!-- Logged-in user info -->
-        <div class="sidebar-user">
-          <div class="sidebar-user-avatar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <div class="sidebar-user-info">
-            <div class="sidebar-user-name">${currentUser.full_name}</div>
-            <div class="sidebar-user-role">${currentUser.role}</div>
-          </div>
-        </div>
 
         <div class="sidebar-collapse">
           <button id="collapseBtn" title="Collapse sidebar">
@@ -194,18 +198,19 @@ function renderShell(activeId) {
       </div>
     </div>`;
 
-  // ── Collapse toggle ──────────────────────────────────────────
+  // Collapse toggle
   document.getElementById('collapseBtn').addEventListener('click', () => {
     const sidebar = document.getElementById('sidebar');
     sidebar.classList.toggle('collapsed');
     localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
   });
 
+  // Restore sidebar collapsed state
   if (localStorage.getItem('sidebar-collapsed') === 'true') {
     document.getElementById('sidebar').classList.add('collapsed');
   }
 
-  // ── User dropdown ────────────────────────────────────────────
+  // User dropdown toggle
   document.addEventListener('click', function (e) {
     const btn      = document.getElementById('userProfileBtn');
     const dropdown = document.getElementById('userDropdown');
@@ -217,7 +222,7 @@ function renderShell(activeId) {
     }
   });
 
-  // ── Logout ───────────────────────────────────────────────────
+  // Logout button → show modal
   document.getElementById('btn-logout').addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById('userDropdown').style.display = 'none';
@@ -225,17 +230,20 @@ function renderShell(activeId) {
     modal.style.display = 'flex';
   });
 
+  // Cancel logout
   document.getElementById('cancel-logout').addEventListener('click', () => {
     document.getElementById('logout-modal').style.display = 'none';
   });
 
+  // Confirm logout → delegate to Auth
   document.getElementById('confirm-logout').addEventListener('click', () => {
     const btn = document.getElementById('confirm-logout');
     btn.textContent = 'Logging out...';
     btn.disabled = true;
-    Auth.logout();
+    setTimeout(() => Auth.logout(), 500);
   });
 
+  // Close modal on backdrop click
   document.getElementById('logout-modal').addEventListener('click', function (e) {
     if (e.target === this) this.style.display = 'none';
   });

@@ -149,7 +149,7 @@
           <thead><tr><th>Full Name</th><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="accounts-tbody"></tbody>
         </table></div>
-        <div style="padding:14px 20px;border-top:1px solid var(--border);"><div style="font-size:11px;color:var(--text-muted);line-height:1.8;">&bull; Only Admin users can access this section<br>&bull; You cannot deactivate your own account<br>&bull; Available roles: Manager, Sales Rep, Warehouse Staff</div></div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);"><div style="font-size:11px;color:var(--text-muted);line-height:1.8;">&bull; Only Admin users can access this section<br>&bull; You cannot deactivate your own account<br>&bull; Available roles: Manager and Cashier</div></div>
       </div>`;
     renderAccountsTable();
     document.getElementById('btn-add-account').addEventListener('click',openAddAccountModal);
@@ -160,9 +160,9 @@
     if(!EMPLOYEES.length){tbody.innerHTML=`<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No accounts found.</td></tr>`;return;}
     tbody.innerHTML=EMPLOYEES.map((e,i)=>{
       const roleName=e.role?.role_name||'Cashier';
-      const isAdmin=roleName.toLowerCase()==='manager';
+      const isManager=roleName==='Manager';
       const isYou=i===0;
-      const roleBadge=isAdmin?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
+      const roleBadge=isManager?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
       const statusBadge=`<span style="background:#0d2e14;color:#4caf50;border:1px solid rgba(76,175,80,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Active</span>`;
       return `<tr>
         <td style="font-weight:600;color:#fff;">${e.full_name}${isYou?`<span style="color:var(--amber);font-size:11px;margin-left:6px;">(You)</span>`:''}</td>
@@ -239,7 +239,7 @@
           <form id="mf">
             <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="f-name" type="text" placeholder="e.g. Maria Santos" required/></div>
             <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="f-user" type="text" placeholder="e.g. maria" required/></div>
-            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager">Manager</option><option value="Sales Rep">Sales Rep</option><option value="Warehouse Staff">Warehouse Staff</option></select></div>
+            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager">Manager</option><option value="Cashier">Cashier</option></select></div>
             <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="f-pw" type="password" required/></div>
             <div class="form-group"><label class="form-label">Confirm Password</label><input class="form-input" id="f-pw2" type="password" required/></div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Create Account</button></div>
