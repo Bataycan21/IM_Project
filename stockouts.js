@@ -17,7 +17,7 @@
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('toast-show'), 2800);
   }
   function closeModal() { const m = document.getElementById('modalSlot'); if (m) m.innerHTML = ''; }
-  function peso(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+  function peso(n) { return '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
   function formatTime(d) { const dt = new Date(d); return isNaN(dt) ? '—' : dt.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }); }
 
   pc.innerHTML = `

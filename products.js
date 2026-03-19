@@ -20,7 +20,7 @@
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('toast-show'), 2800);
   }
   function closeModal() { const m = document.getElementById('modalSlot'); if (m) m.innerHTML = ''; }
-  function peso(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+  function peso(n) { return '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
   function ensureModalSlot() { if (!document.getElementById('modalSlot')) { const d = document.createElement('div'); d.id = 'modalSlot'; document.body.appendChild(d); } }
 
   pc.innerHTML = `

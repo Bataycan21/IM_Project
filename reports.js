@@ -17,7 +17,7 @@
     t.textContent = msg; t.className = `toast toast-${type} toast-show`;
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('toast-show'), 2800);
   }
-  function peso(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+  function peso(n) { return '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
   function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
   const CHART_DEFAULTS = {

@@ -8,7 +8,7 @@
   document.getElementById('header-title').textContent = 'Dashboard';
 
   const pc = document.getElementById('pageContent');
-  function peso(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+  function peso(n) { return '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
 
   function showToast(msg, type = 'success') {
     let t = document.getElementById('toast');
