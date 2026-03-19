@@ -1,259 +1,142 @@
 // ================================================================
-//  dashboard.js — StockPilot Dashboard (Supabase connected)
+//  dashboard.js — Joe Hardware & Motorparts
 // ================================================================
 
 (async function () {
 
-  // ── Sidebar ───────────────────────────────────────────────────
-  const SIDEBAR = `
-    <aside class="sidebar">
-      <div class="sidebar-logo">
-        <div class="logo-title">⚙️ Joe Hardware<span class="logo-accent">and Motorparts</span></div>
-        <div class="logo-sub">Hardware &amp; Motor Parts</div>
-      </div>
-      <nav class="sidebar-nav">
-        <a href="dashboard.html"  class="nav-item active"><span class="nav-icon">🏠</span> Dashboard</a>
-        <a href="products.html"   class="nav-item"><span class="nav-icon">📦</span> Products</a>
-        <a href="sales.html"      class="nav-item"><span class="nav-icon">🧾</span> Sales</a>
-        <a href="supplies.html"   class="nav-item"><span class="nav-icon">🚚</span> Supplies</a>
-        <a href="returns.html"    class="nav-item"><span class="nav-icon">↩️</span> Returns</a>
-        <a href="stockouts.html"  class="nav-item"><span class="nav-icon">⚠️</span> Stock-Outs</a>
-        <a href="customers.html"  class="nav-item"><span class="nav-icon">👥</span> Customers</a>
-        <a href="employees.html"  class="nav-item"><span class="nav-icon">👤</span> Employees</a>
-        <a href="suppliers.html"  class="nav-item"><span class="nav-icon">🏭</span> Suppliers</a>
-      </nav>
-      <div class="sidebar-footer">👤 Maria Santos</div>
-    </aside>`;
+  renderShell('dashboard');
+  document.getElementById('header-title').textContent = 'Dashboard';
 
-  // ── Shell ─────────────────────────────────────────────────────
-  document.getElementById('app').innerHTML = `
-    <div class="app">
-      ${SIDEBAR}
-      <main class="main">
-        <div id="pageContent">
-          <div class="page-header">
-            <div>
-              <div class="dashboard-date" id="dashboard-date"></div>
-              <h1 class="page-title">Dashboard</h1>
-            </div>
-            <div style="display:flex;gap:10px;">
-              <button class="btn btn-ghost" id="btn-refresh">🔄 Refresh</button>
-              <button class="btn btn-red"   id="btn-quick-sale">+ Quick Sale</button>
-            </div>
-          </div>
-
-          <!-- KPI Cards -->
-          <div class="kpi-grid">
-            <div class="kpi-card"><span class="kpi-icon">📦</span><div class="kpi-value color-blue"  id="kpi-products">—</div><div class="kpi-label">Total Products</div></div>
-            <div class="kpi-card"><span class="kpi-icon">💰</span><div class="kpi-value color-green" id="kpi-sales">—</div><div class="kpi-label">Today's Sales</div></div>
-            <div class="kpi-card"><span class="kpi-icon">↩️</span><div class="kpi-value color-amber" id="kpi-returns">—</div><div class="kpi-label">Total Returns</div></div>
-            <div class="kpi-card"><span class="kpi-icon">⚠️</span><div class="kpi-value color-red"   id="kpi-lowstock">—</div><div class="kpi-label">Low Stock Items</div></div>
-          </div>
-
-          <!-- Panels -->
-          <div class="panel-grid">
-            <div class="card">
-              <div class="panel-header">
-                <div class="panel-title">Low Stock Alerts</div>
-                <input class="panel-search" id="search-lowstock" type="text" placeholder="🔍 Search..."/>
-              </div>
-              <div id="low-stock-list"><div class="empty-state">Loading...</div></div>
-            </div>
-            <div class="card">
-              <div class="panel-header">
-                <div class="panel-title">Recent Sales</div>
-                <input class="panel-search" id="search-sales" type="text" placeholder="🔍 Search..."/>
-              </div>
-              <div id="recent-sales-list"><div class="empty-state">Loading...</div></div>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-    <div id="modalSlot"></div>
-    <div id="toast" class="toast"></div>
-    <button class="fab-help" id="btn-help">?</button>
-  `;
-
-  // ── Helpers ───────────────────────────────────────────────────
-  const today = new Date().toLocaleDateString('en-PH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  document.getElementById('dashboard-date').textContent = today;
-
-  function peso(n) { return '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+  const pc = document.getElementById('pageContent');
+  function peso(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
 
   function showToast(msg, type = 'success') {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = `toast toast-${type} toast-show`;
-    clearTimeout(t._t);
-    t._t = setTimeout(() => t.classList.remove('toast-show'), 2800);
+    let t = document.getElementById('toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.className = `toast toast-${type} toast-show`;
+    clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('toast-show'), 2800);
   }
 
-  function closeModal() { document.getElementById('modalSlot').innerHTML = ''; }
+  pc.innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="dashboard-date" id="dashboard-date"></div>
+        <h1 class="page-title">Dashboard</h1>
+        <div class="page-sub">Executive overview of store operations</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-ghost" id="btn-refresh">&#8635; Refresh</button>
+        <button class="btn btn-amber" id="btn-quick-sale">+ Quick Sale</button>
+      </div>
+    </div>
 
-  // ── Fetch & Render ────────────────────────────────────────────
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Today's Sales <span class="kpi-icon">&#128178;</span></div><div class="kpi-value" id="kpi-sales">—</div><div class="kpi-trend" id="kpi-trend"></div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Products <span class="kpi-icon">&#128230;</span></div><div class="kpi-value" id="kpi-products">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Pending Supplies <span class="kpi-icon">&#128666;</span></div><div class="kpi-value" id="kpi-supplies">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Returns Today <span class="kpi-icon">&#8617;</span></div><div class="kpi-value" id="kpi-returns">—</div></div>
+    </div>
+
+    <div class="stock-overview-card">
+      <div class="stock-overview-title">Stock Level Overview</div>
+      <div class="stock-bars-grid" id="stock-bars-grid"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <div class="low-stock-section">
+      <div class="section-title">&#9888; Low Stock Alerts</div>
+      <div class="low-stock-grid" id="low-stock-grid"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <div class="activity-card">
+      <div class="section-title" style="margin-bottom:6px;">Recent Activity</div>
+      <div id="recent-activity"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <div id="toast" class="toast"></div>`;
+
+  document.getElementById('dashboard-date').textContent =
+    new Date().toLocaleDateString('en-PH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
   async function loadDashboard() {
-
-    // KPI: total products
-    const { count: totalProducts } = await db
-      .from('product')
-      .select('*', { count: 'exact', head: true });
-
-    // KPI: today's sales — match any sale_date that starts with today's date string
-    // This handles both plain date "2026-03-12" and timestamp "2026-03-12T..."
+    const { count: totalProducts } = await db.from('product').select('*', { count:'exact', head:true });
     const todayStr = new Date().toISOString().split('T')[0];
-    const { data: todaySales } = await db
-      .from('sale')
-      .select('total_amount')
-      .gte('sale_date', todayStr)
-      .lte('sale_date', todayStr + 'T23:59:59.999Z');
+    const { data: todaySales } = await db.from('sale').select('total_amount').gte('sale_date', todayStr).lte('sale_date', todayStr + 'T23:59:59.999Z');
     const todayTotal = (todaySales || []).reduce((s, r) => s + parseFloat(r.total_amount || 0), 0);
+    const { data: todayReturns } = await db.from('return').select('return_id').gte('return_date', todayStr);
+    const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
+    const { count: pendingSupplies } = await db.from('supply').select('*', { count:'exact', head:true }).gte('supply_date', weekAgo);
 
-    // KPI: total returns count
-    const { count: totalReturns } = await db
-      .from('return')
-      .select('*', { count: 'exact', head: true });
-
-    // KPI: low stock — fetch ALL products and count those at or below reorder level
-    const { data: allProducts } = await db
-      .from('product')
-      .select('quantity, reorder_level, product_name');
-    const lowStockCount = (allProducts || []).filter(p => p.quantity <= p.reorder_level).length;
-
-    document.getElementById('kpi-products').textContent = (totalProducts || 0).toLocaleString();
     document.getElementById('kpi-sales').textContent    = peso(todayTotal);
-    document.getElementById('kpi-returns').textContent  = totalReturns || 0;
-    document.getElementById('kpi-lowstock').textContent = lowStockCount;
+    document.getElementById('kpi-products').textContent = (totalProducts || 0).toLocaleString();
+    document.getElementById('kpi-supplies').textContent = pendingSupplies || 0;
+    document.getElementById('kpi-returns').textContent  = (todayReturns || []).length;
 
-    // Low Stock List — all low stock items sorted by most critical first
-    const lowItems = (allProducts || [])
-      .filter(p => p.quantity <= p.reorder_level)
-      .sort((a, b) => a.quantity - b.quantity)
-      .slice(0, 10);
-    renderLowStock(lowItems);
+    const { data: allProducts } = await db.from('product').select('product_id, product_name, quantity, reorder_level, category(category_name)').order('product_name');
+    const products = allProducts || [];
 
-    // Recent Sales — fetch latest 8 sales ordered by sale_date descending
-    const { data: sales } = await db
-      .from('sale')
-      .select('sale_id, total_amount, sale_date, customer(full_name)')
-      .order('sale_date', { ascending: false })
-      .order('sale_id',   { ascending: false })
-      .limit(8);
-    renderSales(sales || []);
-  }
-
-  let _lowStock = [], _sales = [];
-
-  function renderLowStock(items) {
-    _lowStock = items;
-    const q = (document.getElementById('search-lowstock')?.value || '').toLowerCase();
-    const filtered = items.filter(i => i.product_name.toLowerCase().includes(q));
-    document.getElementById('low-stock-list').innerHTML = filtered.length
-      ? filtered.map(i => {
-          const crit = i.quantity === 0 || i.quantity <= i.reorder_level / 2;
-          return `<div class="list-row">
-            <div>
-              <div class="list-row-name">${i.product_name}</div>
-              <div class="list-row-sub">Qty: ${i.quantity} · Reorder at: ${i.reorder_level}</div>
-            </div>
-            <span class="badge ${crit ? 'badge-red' : 'badge-yellow'}">${crit ? 'Critical' : 'Low Stock'}</span>
+    // Stock bars
+    const catMap = {};
+    products.forEach(p => {
+      const cat = p.category?.category_name || 'Other';
+      if (!catMap[cat]) catMap[cat] = { qty: 0, reorder: 0 };
+      catMap[cat].qty     += p.quantity;
+      catMap[cat].reorder += p.reorder_level;
+    });
+    const cats = Object.entries(catMap).slice(0, 6);
+    document.getElementById('stock-bars-grid').innerHTML = cats.length
+      ? cats.map(([name, data]) => {
+          const pct = Math.min(100, Math.round((data.qty / ((data.reorder * 3) || 100)) * 100));
+          const colorClass = pct <= 30 ? 'low' : pct <= 60 ? 'medium' : 'good';
+          return `<div class="stock-bar-item">
+            <div class="stock-bar-header"><div class="stock-bar-label">${name}</div><div class="stock-bar-pct">${pct}%</div></div>
+            <div class="stock-bar-track"><div class="stock-bar-fill ${colorClass}" style="width:${pct}%;"></div></div>
           </div>`;
         }).join('')
-      : `<div class="empty-state">No low stock items.</div>`;
+      : `<div class="empty-state">No products found.</div>`;
+
+    // Low stock cards
+    const lowItems = products.filter(p => p.quantity <= p.reorder_level).sort((a,b) => a.quantity - b.quantity).slice(0, 4);
+    document.getElementById('low-stock-grid').innerHTML = lowItems.length
+      ? lowItems.map(p => {
+          const pct = p.reorder_level > 0 ? Math.min(100, Math.round((p.quantity / p.reorder_level) * 100)) : 0;
+          const isOut = p.quantity <= 0;
+          return `<div class="low-stock-card">
+            ${isOut ? '<div class="out-dot"></div>' : ''}
+            <div class="low-stock-name">${p.product_name}</div>
+            <div class="low-stock-cat">${p.category?.category_name || ''}</div>
+            <div class="low-stock-bar-track"><div class="low-stock-bar-fill" style="width:${pct}%;"></div></div>
+            <div class="low-stock-stats">
+              <div class="low-stock-stat"><div class="low-stock-stat-label">Current</div><div class="low-stock-stat-val ${isOut?'danger':''}">${p.quantity}</div></div>
+              <div class="low-stock-stat" style="text-align:right;"><div class="low-stock-stat-label">Reorder</div><div class="low-stock-stat-val warn">${p.reorder_level}</div></div>
+            </div>
+            <button class="btn-reorder" onclick="window.location.href='supply-suppliers.html'">Reorder</button>
+          </div>`;
+        }).join('')
+      : `<div class="empty-state" style="grid-column:1/-1;">&#10003; All stock levels OK</div>`;
+
+    // Recent activity
+    const [{ data: sales }, { data: returns }] = await Promise.all([
+      db.from('sale').select('sale_id, sale_date, total_amount, sale_item(quantity, product(product_name)), employee(full_name)').order('sale_date',{ascending:false}).order('sale_id',{ascending:false}).limit(6),
+      db.from('return').select('return_id, return_date, quantity, sale_item(product(product_name))').order('return_date',{ascending:false}).limit(3),
+    ]);
+    const activity = [
+      ...(sales||[]).flatMap(s => (s.sale_item||[]).slice(0,1).map(si => ({ type:'SALE', product: si.product?.product_name||'?', qty: -(si.quantity), time: s.sale_date, by: s.employee?.full_name||'Staff', ts: s.sale_date+String(s.sale_id).padStart(8,'0') }))),
+      ...(returns||[]).map(r => ({ type:'RETURN', product: r.sale_item?.product?.product_name||'?', qty: r.quantity, time: r.return_date, by: 'Staff', ts: r.return_date+String(r.return_id).padStart(8,'0') })),
+    ].sort((a,b) => b.ts.localeCompare(a.ts)).slice(0,10);
+
+    document.getElementById('recent-activity').innerHTML = activity.length
+      ? activity.map(a => `<div class="activity-row">
+          <span class="activity-type-badge">${a.type}</span>
+          <div class="activity-product">${a.product}</div>
+          <div class="activity-qty ${a.qty<0?'neg':'pos'}">${a.qty<0?a.qty:'+'+a.qty}</div>
+          <div class="activity-meta">${a.time} &nbsp; ${a.by}</div>
+        </div>`).join('')
+      : `<div class="empty-state">No recent activity.</div>`;
   }
 
-  function renderSales(items) {
-    _sales = items;
-    const q = (document.getElementById('search-sales')?.value || '').toLowerCase();
-    const filtered = items.filter(i => (i.customer?.full_name || '').toLowerCase().includes(q));
-    document.getElementById('recent-sales-list').innerHTML = filtered.length
-      ? filtered.map(i => `<div class="list-row">
-          <div>
-            <div class="list-row-name">${i.customer?.full_name || 'Walk-in'}</div>
-            <div class="list-row-sub list-row-amount">${peso(i.total_amount)}</div>
-          </div>
-          <span class="badge badge-green">Completed</span>
-        </div>`).join('')
-      : `<div class="empty-state">No sales found.</div>`;
-  }
+  document.getElementById('btn-quick-sale').addEventListener('click', () => { window.location.href = 'products.html'; });
+  document.getElementById('btn-refresh').addEventListener('click', async () => { showToast('Refreshing...'); await loadDashboard(); showToast('Refreshed!'); });
 
   await loadDashboard();
-
-  // ── Events ────────────────────────────────────────────────────
-  document.getElementById('btn-help').addEventListener('click', () => showToast('💡 Use the sidebar to navigate between modules.'));
-
-  document.getElementById('search-lowstock').addEventListener('input', function () { renderLowStock(_lowStock); });
-  document.getElementById('search-sales').addEventListener('input', function () { renderSales(_sales); });
-
-  document.getElementById('btn-refresh').addEventListener('click', async function () {
-    this.textContent = '⏳ Refreshing...'; this.disabled = true;
-    await loadDashboard();
-    showToast('Dashboard refreshed!');
-    this.textContent = '🔄 Refresh'; this.disabled = false;
-  });
-
-  // Quick Sale Modal
-  document.getElementById('btn-quick-sale').addEventListener('click', async () => {
-    const { data: customers } = await db.from('customer').select('customer_id, full_name').order('full_name');
-    const { data: employees } = await db.from('employee').select('employee_id, full_name').order('full_name');
-    const todayVal = new Date().toISOString().split('T')[0];
-
-    document.getElementById('modalSlot').innerHTML = `
-      <div class="modal modal-open" id="modal">
-        <div class="modal-box">
-          <div class="modal-header">
-            <div class="modal-title">🧾 Quick Sale</div>
-            <button class="modal-close" id="modal-close">✕</button>
-          </div>
-          <form id="modal-form">
-            <div class="form-group">
-              <label class="form-label">Date</label>
-              <input class="form-input" id="f-date" type="date" value="${todayVal}" required/>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Customer</label>
-              <select class="form-input" id="f-customer">
-                ${(customers || []).map(c => `<option value="${c.customer_id}">${c.full_name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Employee</label>
-              <select class="form-input" id="f-employee">
-                ${(employees || []).map(e => `<option value="${e.employee_id}">${e.full_name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Total Amount (₱)</label>
-              <input class="form-input" id="f-total" type="number" min="0" step="0.01" placeholder="0.00" required/>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn-ghost" id="modal-cancel">Cancel</button>
-              <button type="submit" class="btn btn-red">Save Sale</button>
-            </div>
-          </form>
-        </div>
-      </div>`;
-
-    document.getElementById('modal-close').addEventListener('click', closeModal);
-    document.getElementById('modal-cancel').addEventListener('click', closeModal);
-    document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
-
-    document.getElementById('modal-form').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const sale_date    = document.getElementById('f-date').value;
-      const customer_id  = parseInt(document.getElementById('f-customer').value);
-      const employee_id  = parseInt(document.getElementById('f-employee').value);
-      const total_amount = parseFloat(document.getElementById('f-total').value);
-
-      if (isNaN(total_amount)) { showToast('Please fill all fields.', 'error'); return; }
-
-      const { error } = await db.from('sale').insert({ sale_date, customer_id, employee_id, total_amount });
-      if (error) { showToast('Error saving sale.', 'error'); return; }
-
-      closeModal();
-      await loadDashboard();
-      showToast('Sale saved!');
-    });
-  });
 
 })();
