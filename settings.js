@@ -165,7 +165,7 @@
       const roleBadge=isManager?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
       const statusBadge=`<span style="background:#0d2e14;color:#4caf50;border:1px solid rgba(76,175,80,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Active</span>`;
       return `<tr>
-        <td style="font-weight:600;color:#fff;">${e.full_name}${isYou?`<span style="color:var(--amber);font-size:11px;margin-left:6px;">(You)</span>`:''}</td>
+        <td style="font-weight:600;color:#fff;">${e.full_name}${isYou?`<span style="color:var(--amber);font-size:11px;margin-left:6px;"></span>`:''}</td>
         <td style="font-family:'Courier New',monospace;font-size:12px;color:var(--text-muted);">${e.username}</td>
         <td>${roleBadge}</td>
         <td>${statusBadge}</td>
