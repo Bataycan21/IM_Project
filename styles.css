@@ -1810,3 +1810,147 @@ td.td-muted { color: var(--text-muted); }
   padding: 28px 32px;
   background: var(--bg);
 }
+
+/* ============================================
+   LOGIN PAGE
+   ============================================ */
+.login-bg {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-image: radial-gradient(circle, #2a2a2a 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--amber);
+  border-radius: 12px;
+  padding: 40px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.login-brand-icon {
+  width: 40px; height: 40px;
+  background: var(--amber);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.login-brand-icon svg { width: 22px; height: 22px; }
+
+.login-brand-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 18px; font-weight: 900;
+  color: var(--amber); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.login-brand-sub {
+  font-size: 9px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
+}
+
+.login-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 26px; font-weight: 900;
+  color: #fff; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 4px;
+  text-align: center;
+}
+.login-sub {
+  font-size: 12px; color: var(--text-muted);
+  text-align: center; margin-bottom: 28px;
+}
+
+.login-input-wrap {
+  position: relative;
+  display: flex; align-items: center;
+}
+.login-input-icon {
+  position: absolute; left: 12px;
+  width: 15px; height: 15px;
+  stroke: var(--text-muted);
+  pointer-events: none; flex-shrink: 0;
+}
+.login-input { padding-left: 38px !important; }
+.login-toggle-pw {
+  position: absolute; right: 10px;
+  background: none; border: none; cursor: pointer;
+  padding: 4px; color: var(--text-muted);
+  transition: color 0.15s; display: flex; align-items: center;
+}
+.login-toggle-pw:hover { color: var(--text-sub); }
+.login-toggle-pw svg { width: 15px; height: 15px; }
+
+.login-error {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--red-dim); border: 1px solid rgba(229,57,53,0.3);
+  border-radius: 7px; padding: 10px 12px;
+  font-size: 12px; color: var(--red); font-weight: 600;
+  margin-bottom: 16px;
+}
+.login-error svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+.login-btn {
+  width: 100%; padding: 13px;
+  background: var(--amber); border: none; border-radius: 7px;
+  font-family: 'Barlow', sans-serif; font-size: 14px;
+  font-weight: 800; color: #000;
+  text-transform: uppercase; letter-spacing: 2px;
+  cursor: pointer; margin-top: 4px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.login-btn:hover:not(:disabled) { background: var(--amber-dark); }
+.login-btn:disabled { cursor: not-allowed; }
+
+.login-footer {
+  text-align: center;
+  font-size: 11px; color: var(--text-dim);
+  margin-top: 24px; padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* Sidebar user section */
+.sidebar-user {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0; overflow: hidden;
+}
+.sidebar-user-avatar {
+  width: 32px; height: 32px;
+  border: 2px solid var(--amber);
+  border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.sidebar-user-avatar svg { width: 15px; height: 15px; stroke: var(--amber); }
+.sidebar-user-info { overflow: hidden; }
+.sidebar-user-name { font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-user-role { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.sidebar.collapsed .sidebar-user { justify-content: center; padding: 12px 0; }
+.sidebar.collapsed .sidebar-user-info { display: none; }
+
+/* Shake animation for login errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}

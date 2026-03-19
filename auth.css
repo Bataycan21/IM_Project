@@ -1,0 +1,142 @@
+/* ============================================
+   AUTH / LOGIN PAGE
+   Joe Hardware & Motorparts
+   Matches exact app design system (styles.css)
+   ============================================ */
+
+.login-page {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* Left branding panel */
+.login-left {
+  width: 420px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Dot grid background */
+.login-left::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, #2a2a2a 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Amber glow top-right */
+.login-left::after {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(245,166,35,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-left-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 48px;
+}
+
+.login-left-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 48px;
+  font-weight: 900;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+
+.login-left-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 40px;
+  max-width: 280px;
+}
+
+.login-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.login-stat-val {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--amber);
+  letter-spacing: 0.5px;
+}
+
+.login-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* Right form panel */
+.login-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  background: var(--bg);
+}
+
+.login-form-wrap {
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-form-header {
+  margin-bottom: 32px;
+}
+
+/* Shake animation on error */
+@keyframes loginShake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .login-page       { flex-direction: column; }
+  .login-left       { width: 100%; padding: 32px 24px; min-height: auto; }
+  .login-left-title { font-size: 32px; }
+  .login-stats      { flex-direction: row; gap: 24px; }
+  .login-right      { padding: 32px 24px; }
+}
