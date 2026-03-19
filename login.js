@@ -1,12 +1,12 @@
 // ================================================================
 //  login.js — Joe Hardware & Motorparts
-//  Uses Auth from auth.js
+//  Login page — uses Auth from auth.js
 // ================================================================
 
 (async function () {
 
-  // Already logged in → go to dashboard
-  if (Auth.isLoggedIn()) {
+  // Already logged in → go straight to dashboard
+  if (Auth.getUser()) {
     window.location.href = 'dashboard.html';
     return;
   }
@@ -15,7 +15,6 @@
     <div class="login-bg">
       <div class="login-card">
 
-        <!-- Logo -->
         <div class="login-logo">
           <div class="login-brand-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2">
@@ -29,7 +28,7 @@
         </div>
 
         <div class="login-title">Sign In</div>
-        <div class="login-sub">Enter your credentials to continue</div>
+        <div class="login-sub">Enter your credentials to access the system</div>
 
         <form id="login-form" autocomplete="off">
 
@@ -63,6 +62,7 @@
             </div>
           </div>
 
+          <!-- Error message -->
           <div id="login-error" class="login-error" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
@@ -83,7 +83,7 @@
       </div>
     </div>`;
 
-  // Show/hide password
+  // Toggle password visibility
   document.getElementById('toggle-pw').addEventListener('click', () => {
     const input = document.getElementById('f-password');
     const icon  = document.getElementById('eye-icon');
@@ -96,7 +96,7 @@
     }
   });
 
-  // Submit
+  // Form submit
   document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
 
@@ -111,50 +111,29 @@
     btn.style.opacity = '0.7';
     errEl.style.display = 'none';
 
-    try {
-      const { data, error } = await db
-        .from('employee')
-        .select('employee_id, full_name, username, password, role(role_name)')
-        .eq('username', username)
-        .maybeSingle();
+    // Call Auth.login() from auth.js
+    const result = await Auth.login(username, password);
 
-      if (error || !data || data.password !== password) {
-        showError('Invalid username or password.');
-        return;
-      }
-
-      // Save session via Auth
-      Auth.setUser({
-        employee_id: data.employee_id,
-        full_name:   data.full_name,
-        username:    data.username,
-        role:        data.role?.role_name || 'Staff',
-      });
-
-      // Success
-      btn.textContent       = '✓ Success!';
-      btn.style.background  = '#4caf50';
-      btn.style.opacity     = '1';
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 600);
-
-    } catch (err) {
-      showError('Something went wrong. Please try again.');
+    if (!result.ok) {
+      document.getElementById('login-error-msg').textContent = result.message;
+      errEl.style.display = 'flex';
+      btn.textContent     = 'Log In';
+      btn.disabled        = false;
+      btn.style.opacity   = '1';
+      btn.style.background = '';
+      // Shake animation
+      const card = document.querySelector('.login-card');
+      card.style.animation = 'none';
+      card.offsetHeight;
+      card.style.animation = 'shake 0.3s ease';
+      return;
     }
-  });
 
-  function showError(msg) {
-    const btn   = document.getElementById('login-btn');
-    const errEl = document.getElementById('login-error');
-    document.getElementById('login-error-msg').textContent = msg;
-    errEl.style.display = 'flex';
-    btn.textContent      = 'Log In';
-    btn.disabled         = false;
+    // Success
+    btn.textContent      = '✓ Success!';
+    btn.style.background = '#4caf50';
     btn.style.opacity    = '1';
-    btn.style.background = '';
-    const card = document.querySelector('.login-card');
-    card.style.animation = 'none';
-    card.offsetHeight;
-    card.style.animation = 'shake 0.3s ease';
-  }
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 600);
+  });
 
 })();
