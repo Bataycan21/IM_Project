@@ -4,6 +4,8 @@
 
 (async function () {
 
+  if (!Auth.require()) return;
+
   renderShell('settings');
   document.getElementById('header-title').textContent = 'Settings';
 
@@ -147,7 +149,7 @@
           <thead><tr><th>Full Name</th><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="accounts-tbody"></tbody>
         </table></div>
-        <div style="padding:14px 20px;border-top:1px solid var(--border);"><div style="font-size:11px;color:var(--text-muted);line-height:1.8;">&bull; Only Admin users can access this section<br>&bull; You cannot deactivate your own account<br>&bull; Available roles: Admin and Cashier</div></div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);"><div style="font-size:11px;color:var(--text-muted);line-height:1.8;">&bull; Only Admin users can access this section<br>&bull; You cannot deactivate your own account<br>&bull; Available roles: Manager, Sales Rep, Warehouse Staff</div></div>
       </div>`;
     renderAccountsTable();
     document.getElementById('btn-add-account').addEventListener('click',openAddAccountModal);
@@ -158,9 +160,9 @@
     if(!EMPLOYEES.length){tbody.innerHTML=`<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No accounts found.</td></tr>`;return;}
     tbody.innerHTML=EMPLOYEES.map((e,i)=>{
       const roleName=e.role?.role_name||'Cashier';
-      const isAdmin=roleName.toLowerCase()==='admin';
+      const isAdmin=roleName.toLowerCase()==='manager';
       const isYou=i===0;
-      const roleBadge=isAdmin?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Admin</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">Cashier</span>`;
+      const roleBadge=isAdmin?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
       const statusBadge=`<span style="background:#0d2e14;color:#4caf50;border:1px solid rgba(76,175,80,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Active</span>`;
       return `<tr>
         <td style="font-weight:600;color:#fff;">${e.full_name}${isYou?`<span style="color:var(--amber);font-size:11px;margin-left:6px;">(You)</span>`:''}</td>
@@ -187,7 +189,7 @@
           <form id="mf">
             <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="f-name" type="text" value="${e.full_name}" required/></div>
             <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="f-username" type="text" value="${e.username}" required/></div>
-            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="admin" ${(e.role?.role_name||'').toLowerCase()==='admin'?'selected':''}>Admin</option><option value="cashier" ${(e.role?.role_name||'').toLowerCase()==='cashier'?'selected':''}>Cashier</option></select></div>
+            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager" ${(e.role?.role_name||'')==='Manager'?'selected':''}>Manager</option><option value="Sales Rep" ${(e.role?.role_name||'')==='Sales Rep'?'selected':''}>Sales Rep</option><option value="Warehouse Staff" ${(e.role?.role_name||'')==='Warehouse Staff'?'selected':''}>Warehouse Staff</option></select></div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Save Changes</button></div>
           </form>
         </div>
@@ -237,7 +239,7 @@
           <form id="mf">
             <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="f-name" type="text" placeholder="e.g. Maria Santos" required/></div>
             <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="f-user" type="text" placeholder="e.g. maria" required/></div>
-            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="cashier">Cashier</option><option value="admin">Admin</option></select></div>
+            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager">Manager</option><option value="Sales Rep">Sales Rep</option><option value="Warehouse Staff">Warehouse Staff</option></select></div>
             <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="f-pw" type="password" required/></div>
             <div class="form-group"><label class="form-label">Confirm Password</label><input class="form-input" id="f-pw2" type="password" required/></div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Create Account</button></div>
@@ -252,7 +254,7 @@
       const role=document.getElementById('f-role').value;const pw=document.getElementById('f-pw').value;const pw2=document.getElementById('f-pw2').value;
       if(!name||!user||!pw){showToast('All fields required.','error');return;}if(pw!==pw2){showToast('Passwords do not match.','error');return;}
       const {data:roles}=await db.from('role').select('role_id,role_name');
-      const roleObj=roles?.find(r=>r.role_name.toLowerCase()===role);
+      const roleObj=roles?.find(r=>r.role_name===role);
       const {error}=await db.from('employee').insert({full_name:name,username:user,password:pw,role_id:roleObj?.role_id||null});
       if(error){showToast('Error creating account.','error');return;}
       closeModal();showToast(`Account "${name}" created!`);await renderAccountManagement();
