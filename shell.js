@@ -70,7 +70,8 @@ const NAV_ITEMS = [
 ];
 
 function renderShell(activeId) {
-  const currentUser = { name: 'Admin', role: 'Admin' };
+  // Get current user from auth.js
+  const currentUser = Auth.getUser();
 
   const navHTML = NAV_ITEMS.map(item => `
     <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
@@ -85,17 +86,31 @@ function renderShell(activeId) {
 
         <a href="dashboard.html" class="sidebar-brand">
           <div class="brand-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2">
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
             </svg>
           </div>
           <div class="brand-text">
-            <div class="brand-name">JoEx Hardware</div>
+            <div class="brand-name">Joe Hardware</div>
             <div class="brand-sub">&amp; Motorparts</div>
           </div>
         </a>
 
         <nav class="sidebar-nav">${navHTML}</nav>
+
+        <!-- Logged-in user info -->
+        <div class="sidebar-user">
+          <div class="sidebar-user-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">${currentUser.full_name}</div>
+            <div class="sidebar-user-role">${currentUser.role}</div>
+          </div>
+        </div>
 
         <div class="sidebar-collapse">
           <button id="collapseBtn" title="Collapse sidebar">
@@ -119,7 +134,7 @@ function renderShell(activeId) {
                 </svg>
               </div>
               <div class="user-info">
-                <div class="user-name">${currentUser.name}</div>
+                <div class="user-name">${currentUser.full_name}</div>
                 <div class="user-role">${currentUser.role}</div>
               </div>
               <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -127,7 +142,7 @@ function renderShell(activeId) {
               </svg>
               <div id="userDropdown" class="user-dropdown" style="display:none;">
                 <div class="dropdown-header">
-                  <div class="dropdown-name">${currentUser.name}</div>
+                  <div class="dropdown-name">${currentUser.full_name}</div>
                   <div class="dropdown-role">${currentUser.role}</div>
                 </div>
                 <div class="dropdown-body">
@@ -139,7 +154,7 @@ function renderShell(activeId) {
                     Settings
                   </a>
                   <div class="dropdown-divider"></div>
-                  <a href="index.html" class="dropdown-item dropdown-item-danger">
+                  <a href="#" id="btn-logout" class="dropdown-item dropdown-item-danger">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                       <polyline points="16 17 21 12 16 7"/>
@@ -155,14 +170,42 @@ function renderShell(activeId) {
         <main class="page-content" id="pageContent"></main>
       </div>
     </div>
-  `;
 
-  // Collapse toggle
+    <!-- Logout Confirmation Modal -->
+    <div id="logout-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(3px);">
+      <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:10px;padding:28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <div style="width:38px;height:38px;background:var(--red-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:0.8px;">Confirm Logout</div>
+        </div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.6;">
+          Are you sure you want to log out, <strong style="color:#fff;">${currentUser.full_name}</strong>?
+        </p>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn-ghost" id="cancel-logout">Cancel</button>
+          <button class="btn" id="confirm-logout" style="background:var(--red);color:#fff;">Log Out</button>
+        </div>
+      </div>
+    </div>`;
+
+  // ── Collapse toggle ──────────────────────────────────────────
   document.getElementById('collapseBtn').addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
   });
 
-  // User dropdown toggle
+  if (localStorage.getItem('sidebar-collapsed') === 'true') {
+    document.getElementById('sidebar').classList.add('collapsed');
+  }
+
+  // ── User dropdown ────────────────────────────────────────────
   document.addEventListener('click', function (e) {
     const btn      = document.getElementById('userProfileBtn');
     const dropdown = document.getElementById('userDropdown');
@@ -174,8 +217,26 @@ function renderShell(activeId) {
     }
   });
 
-  // Restore sidebar collapsed state
-  if (localStorage.getItem('sidebar-collapsed') === 'true') {
-    document.getElementById('sidebar').classList.add('collapsed');
-  }
+  // ── Logout ───────────────────────────────────────────────────
+  document.getElementById('btn-logout').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('userDropdown').style.display = 'none';
+    const modal = document.getElementById('logout-modal');
+    modal.style.display = 'flex';
+  });
+
+  document.getElementById('cancel-logout').addEventListener('click', () => {
+    document.getElementById('logout-modal').style.display = 'none';
+  });
+
+  document.getElementById('confirm-logout').addEventListener('click', () => {
+    const btn = document.getElementById('confirm-logout');
+    btn.textContent = 'Logging out...';
+    btn.disabled = true;
+    Auth.logout();
+  });
+
+  document.getElementById('logout-modal').addEventListener('click', function (e) {
+    if (e.target === this) this.style.display = 'none';
+  });
 }
