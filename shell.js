@@ -109,7 +109,7 @@ function renderShell(activeId) {
             </svg>
           </div>
           <div class="brand-text">
-            <div class="brand-name">Joe Hardware</div>
+            <div class="brand-name">Joex Hardware</div>
             <div class="brand-sub">&amp; Motorparts</div>
           </div>
         </a>
