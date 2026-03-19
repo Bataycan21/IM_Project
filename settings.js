@@ -189,7 +189,7 @@
           <form id="mf">
             <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="f-name" type="text" value="${e.full_name}" required/></div>
             <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="f-username" type="text" value="${e.username}" required/></div>
-            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager" ${(e.role?.role_name||'')==='Manager'?'selected':''}>Manager</option><option value="Sales Rep" ${(e.role?.role_name||'')==='Sales Rep'?'selected':''}>Sales Rep</option><option value="Warehouse Staff" ${(e.role?.role_name||'')==='Warehouse Staff'?'selected':''}>Warehouse Staff</option></select></div>
+            <div class="form-group"><label class="form-label">Role</label><select class="form-input" id="f-role"><option value="Manager" ${(e.role?.role_name||'')==='Manager'?'selected':''}>Manager</option><option value="Cashier" ${(e.role?.role_name||'')==='Cashier'?'selected':''}>Cashier</option></select></div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Save Changes</button></div>
           </form>
         </div>
