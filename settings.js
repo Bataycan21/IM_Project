@@ -198,9 +198,14 @@
     document.getElementById('modal').addEventListener('click',ev=>{if(ev.target.id==='modal')closeModal();});
     document.getElementById('mf').addEventListener('submit',async function(ev){
       ev.preventDefault();
-      const name=document.getElementById('f-name').value.trim();const user=document.getElementById('f-username').value.trim();
+      const name=document.getElementById('f-name').value.trim();
+      const user=document.getElementById('f-username').value.trim();
+      const roleName=document.getElementById('f-role').value;
       if(!name||!user){showToast('All fields required.','error');return;}
-      const {error}=await db.from('employee').update({full_name:name,username:user}).eq('employee_id',empId);
+      // ✅ FIX: look up role_id from selected role name, then include it in the update
+      const {data:roles}=await db.from('role').select('role_id,role_name');
+      const roleObj=roles?.find(r=>r.role_name===roleName);
+      const {error}=await db.from('employee').update({full_name:name,username:user,role_id:roleObj?.role_id}).eq('employee_id',empId);
       if(error){showToast('Error updating account.','error');return;}
       closeModal();showToast('Account updated!');await renderAccountManagement();
     });

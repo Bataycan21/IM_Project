@@ -235,8 +235,8 @@
     }
     const total=cartTotal();
     const today=new Date().toISOString().split('T')[0];
-    const {data:emp}=await db.from('employee').select('employee_id').limit(1);
-    const empId=emp?.[0]?.employee_id||null;
+    // ✅ FIX: use logged-in employee from session instead of fetching first employee
+    const empId=Auth.getUser()?.employee_id||null;
     const {data:sale,error:sE}=await db.from('sale').insert({sale_date:today,total_amount:total,customer_id:customerId,employee_id:empId}).select('sale_id').single();
     if(sE){showToast('Error saving sale.','error');return;}
     const {error:iE}=await db.from('sale_item').insert(cart.map(i=>({sale_id:sale.sale_id,product_id:i.product_id,quantity:i.quantity,unit_price:i.unit_price})));
@@ -362,8 +362,8 @@
       const suppId=document.getElementById('f-sup').value;
       const date=document.getElementById('f-date').value;
       if(!suppId){showToast('Select a supplier.','error');return;}
-      const {data:emp}=await db.from('employee').select('employee_id').limit(1);
-      const empId=emp?.[0]?.employee_id||null;
+      // ✅ FIX: use logged-in employee from session instead of fetching first employee
+      const empId=Auth.getUser()?.employee_id||null;
       const {data:supply,error:sE}=await db.from('supply').insert({supply_date:date,total_amount:qty*cost,supplier_id:parseInt(suppId),employee_id:empId}).select('supply_id').single();
       if(sE){showToast('Error.','error');return;}
       await db.from('supply_item').insert({supply_id:supply.supply_id,product_id:p.product_id,quantity:qty,unit_price:cost});
