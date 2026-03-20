@@ -70,15 +70,14 @@ const NAV_ITEMS = [
 ];
 
 function renderShell(activeId) {
-  // Read logged-in user from auth.js session
   const currentUser = Auth.getUser();
 
-  // ✅ FIX: Removed 'settings' — Cashiers can access it but only see My Account
+  // ✅ 'settings' removed — Cashiers can access it to change their own password
   // settings.js handles its own internal role restrictions
   const MANAGER_ONLY = ['stockouts', 'reports'];
   const isManager = currentUser.role === 'Manager';
 
-  // Block direct URL access for Cashiers on truly manager-only pages
+  // Block direct URL access for Cashiers on manager-only pages
   if (!isManager && MANAGER_ONLY.includes(activeId)) {
     document.getElementById('app').innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg);flex-direction:column;gap:16px;">
