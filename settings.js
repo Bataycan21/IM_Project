@@ -12,6 +12,10 @@
   const pc = document.getElementById('pageContent');
   let CATEGORIES = [], BRANDS = [], UNITS = [], EMPLOYEES = [];
 
+  // ✅ Get current logged-in user and check role
+  const currentUser = Auth.getUser();
+  const isManager = currentUser?.role === 'Manager';
+
   function showToast(msg, type = 'success') {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
@@ -20,6 +24,7 @@
   }
   function closeModal() { const m = document.getElementById('modalSlot'); if (m) m.innerHTML = ''; }
 
+  // ✅ Build tabs conditionally — cashier only sees My Account
   pc.innerHTML = `
     <div class="page-header">
       <div>
@@ -28,15 +33,17 @@
       </div>
     </div>
     <div style="display:flex;gap:4px;margin-bottom:24px;flex-wrap:wrap;">
+      ${isManager ? `
       <button class="settings-tab active" id="stab-store"     onclick="window._switchSettings('store')">Store Info</button>
       <button class="settings-tab"        id="stab-lookup"    onclick="window._switchSettings('lookup')">Lookup Tables</button>
       <button class="settings-tab"        id="stab-accounts"  onclick="window._switchSettings('accounts')">Account Management</button>
-      <button class="settings-tab"        id="stab-myaccount" onclick="window._switchSettings('myaccount')">My Account</button>
+      ` : ''}
+      <button class="settings-tab ${isManager ? '' : 'active'}" id="stab-myaccount" onclick="window._switchSettings('myaccount')">My Account</button>
     </div>
-    <div id="spanel-store"></div>
-    <div id="spanel-lookup"    style="display:none;"></div>
-    <div id="spanel-accounts"  style="display:none;"></div>
-    <div id="spanel-myaccount" style="display:none;"></div>
+    ${isManager ? `<div id="spanel-store"></div>` : ''}
+    ${isManager ? `<div id="spanel-lookup"   style="display:none;"></div>` : ''}
+    ${isManager ? `<div id="spanel-accounts" style="display:none;"></div>` : ''}
+    <div id="spanel-myaccount" style="${isManager ? 'display:none;' : ''}"></div>
     <div id="modalSlot"></div>
     <div id="toast" class="toast"></div>`;
 
@@ -64,7 +71,17 @@
   document.head.appendChild(style);
 
   window._switchSettings = function(tab) {
-    ['store','lookup','accounts','myaccount'].forEach(t=>{document.getElementById(`spanel-${t}`).style.display=t===tab?'block':'none';document.getElementById(`stab-${t}`).classList.toggle('active',t===tab);});
+    // ✅ Block cashiers from accessing manager-only tabs
+    if (!isManager && tab !== 'myaccount') return;
+    const allTabs = isManager
+      ? ['store','lookup','accounts','myaccount']
+      : ['myaccount'];
+    allTabs.forEach(t => {
+      const panel = document.getElementById(`spanel-${t}`);
+      const tabBtn = document.getElementById(`stab-${t}`);
+      if (panel) panel.style.display = t === tab ? 'block' : 'none';
+      if (tabBtn) tabBtn.classList.toggle('active', t === tab);
+    });
     if(tab==='store')    renderStoreInfo();
     if(tab==='lookup')   renderLookupTables();
     if(tab==='accounts') renderAccountManagement();
@@ -160,9 +177,9 @@
     if(!EMPLOYEES.length){tbody.innerHTML=`<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No accounts found.</td></tr>`;return;}
     tbody.innerHTML=EMPLOYEES.map((e,i)=>{
       const roleName=e.role?.role_name||'Cashier';
-      const isManager=roleName==='Manager';
+      const isManagerRole=roleName==='Manager';
       const isYou=i===0;
-      const roleBadge=isManager?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
+      const roleBadge=isManagerRole?`<span style="background:#3a2a0a;color:#f5a623;border:1px solid rgba(245,166,35,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Manager</span>`:`<span style="color:var(--text-muted);font-size:12px;font-weight:500;">${roleName}</span>`;
       const statusBadge=`<span style="background:#0d2e14;color:#4caf50;border:1px solid rgba(76,175,80,0.3);border-radius:4px;padding:3px 9px;font-size:10px;font-weight:800;text-transform:uppercase;">Active</span>`;
       return `<tr>
         <td style="font-weight:600;color:#fff;">${e.full_name}${isYou?`<span style="color:var(--amber);font-size:11px;margin-left:6px;"></span>`:''}</td>
@@ -267,20 +284,25 @@
   }
 
   function renderMyAccount(){
-    document.getElementById('spanel-myaccount').innerHTML=`
+    const panel = document.getElementById('spanel-myaccount');
+    panel.innerHTML=`
       <div class="card" style="max-width:480px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;"><span style="font-size:20px;color:var(--amber);">&#128100;</span><div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fff;">My Account Settings</div></div>
+        ${!isManager ? `<div style="margin-bottom:16px;padding:10px 14px;background:#1a1a1a;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);">&#128274; You can only change your own password. Contact a Manager for other changes.</div>` : ''}
         <form id="my-acct-form">
-          <div class="form-group"><label class="form-label">Current Password</label><input class="form-input" id="f-cur-pw" type="password"/></div>
           <div class="form-group"><label class="form-label">New Password</label><input class="form-input" id="f-new-pw" type="password"/></div>
           <div class="form-group"><label class="form-label">Confirm New Password</label><input class="form-input" id="f-confirm-pw" type="password"/></div>
           <button type="submit" class="btn btn-amber" style="margin-top:4px;">Update Password</button>
         </form>
       </div>`;
-    document.getElementById('my-acct-form').addEventListener('submit',function(e){
+    document.getElementById('my-acct-form').addEventListener('submit', async function(e){
       e.preventDefault();
       const np=document.getElementById('f-new-pw').value;const cp=document.getElementById('f-confirm-pw').value;
-      if(!np){showToast('Enter a new password.','error');return;}if(np!==cp){showToast('Passwords do not match.','error');return;}
+      if(!np){showToast('Enter a new password.','error');return;}
+      if(np!==cp){showToast('Passwords do not match.','error');return;}
+      // ✅ Updates the currently logged-in cashier's own password
+      const {error}=await db.from('employee').update({password:np}).eq('employee_id',currentUser.employee_id);
+      if(error){showToast('Error updating password.','error');return;}
       showToast('Password updated successfully!');this.reset();
     });
   }
@@ -290,6 +312,11 @@
     CATEGORIES=c||[];BRANDS=b||[];UNITS=u||[];
   }
 
-  renderStoreInfo();
+  // ✅ Default panel: Manager sees Store Info, Cashier lands directly on My Account
+  if (isManager) {
+    renderStoreInfo();
+  } else {
+    renderMyAccount();
+  }
 
 })();
