@@ -22,7 +22,7 @@
             </svg>
           </div>
           <div>
-            <div class="login-brand-name">Joe Hardware</div>
+            <div class="login-brand-name">Joex Hardware</div>
             <div class="login-brand-sub">&amp; Motorparts</div>
           </div>
         </div>
@@ -77,7 +77,7 @@
         </form>
 
         <div class="login-footer">
-          Joe Hardware &amp; Motorparts &nbsp;&middot;&nbsp; Inventory System
+          Joex Hardware &amp; Motorparts &nbsp;&middot;&nbsp; Inventory System
         </div>
 
       </div>
