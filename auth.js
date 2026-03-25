@@ -1,40 +1,39 @@
 // ================================================================
 //  auth.js — Joe Hardware & Motorparts
 //  Handles login, logout, session, and auth guard
-//  Used by: login.html (login logic)
-//           shell.js (Auth.getUser, Auth.logout)
-//           every page (Auth.require via shell.js)
 // ================================================================
 
 const Auth = {
 
-  // ── Session ────────────────────────────────────────────────
   SESSION_KEY: 'jh_user',
 
+  // Get current user from localStorage
   getUser() {
     const raw = localStorage.getItem(this.SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   },
 
+  // Save user to localStorage
   setUser(user) {
     localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
   },
 
+  // Clear session
   clearUser() {
     localStorage.removeItem(this.SESSION_KEY);
   },
 
-  // ── Guard — call on every protected page ───────────────────
+  // Auth guard — redirects to login if no session
   require() {
     const user = this.getUser();
     if (!user) {
-      window.location.href = 'login.html';
+      window.location.replace('login.html');
       return null;
     }
     return user;
   },
 
-  // ── Login — called from login.js ───────────────────────────
+  // Login — checks credentials against employee table
   async login(username, password) {
     const { data, error } = await db
       .from('employee')
@@ -42,7 +41,7 @@ const Auth = {
       .eq('username', username)
       .maybeSingle();
 
-    if (error || !data)          return { ok: false, message: 'Invalid username or password.' };
+    if (error || !data)             return { ok: false, message: 'Invalid username or password.' };
     if (data.password !== password) return { ok: false, message: 'Invalid username or password.' };
 
     this.setUser({
@@ -55,19 +54,23 @@ const Auth = {
     return { ok: true };
   },
 
-  // ── Logout — called from shell.js ─────────────────────────
+  // Logout — clears session and redirects to login
   logout() {
     this.clearUser();
-    window.location.href = 'login.html';
+    window.location.replace('login.html');
   },
 
 };
 
-// Auto-guard: any page that loads auth.js (except login.html)
-// will redirect to login if no session exists
-if (!window.location.pathname.endsWith('login.html')) {
-  if (!Auth.require()) {
-    // Redirecting — stop execution
-    throw new Error('Not authenticated');
+// ── Auto guard ────────────────────────────────────────────────
+// Runs on every page EXCEPT login.html
+// Uses window.location.replace so it redirects cleanly with no error
+(function () {
+  const isLoginPage = window.location.pathname.endsWith('login.html') ||
+                      window.location.pathname.endsWith('index.html') ||
+                      window.location.pathname === '/' ||
+                      window.location.pathname === '';
+  if (!isLoginPage && !Auth.getUser()) {
+    window.location.replace('login.html');
   }
-}
+})();
