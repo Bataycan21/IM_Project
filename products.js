@@ -13,6 +13,10 @@
   let cart = [], SALES_HISTORY = [];
   let activeCategory = 'ALL';
 
+  // ✅ Role check — Cashiers cannot add products or adjust stock
+  const currentUser = Auth.getUser();
+  const isManager = currentUser.role === 'Manager';
+
   function showToast(msg, type = 'success') {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
@@ -39,14 +43,18 @@
           <option value="">All Stock</option><option value="ok">In Stock</option>
           <option value="low">Low Stock</option><option value="out">Out of Stock</option>
         </select>
-        <button class="btn btn-amber" id="btn-add-product">+ Add Product</button>
+        ${isManager ? `<button class="btn btn-amber" id="btn-add-product">+ Add Product</button>` : ''}
       </div>
       <div class="catalog-count" id="catalog-count">Loading...</div>
       <div class="card" style="padding:0;overflow:hidden;">
         <div class="table-wrap">
           <table class="product-list-table">
-            <thead><tr><th style="width:55%;">Product</th><th style="width:25%;">Stock</th><th style="width:20%;">Action</th></tr></thead>
-            <tbody id="product-tbody"><tr><td colspan="3" class="td-muted" style="text-align:center;padding:32px;">Loading...</td></tr></tbody>
+            <thead><tr>
+              <th style="width:${isManager ? '55%' : '65%'};">Product</th>
+              <th style="width:${isManager ? '25%' : '35%'};">Stock</th>
+              ${isManager ? `<th style="width:20%;">Action</th>` : ''}
+            </tr></thead>
+            <tbody id="product-tbody"><tr><td colspan="${isManager ? 3 : 2}" class="td-muted" style="text-align:center;padding:32px;">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -153,11 +161,11 @@
   function renderProductTable() {
     document.getElementById('catalog-count').textContent = `${filteredProducts.length} of ${PRODUCTS.length} products`;
     document.getElementById('product-tbody').innerHTML = !filteredProducts.length
-      ? `<tr><td colspan="3" class="td-muted" style="text-align:center;padding:32px;">No products found.</td></tr>`
+      ? `<tr><td colspan="${isManager ? 3 : 2}" class="td-muted" style="text-align:center;padding:32px;">No products found.</td></tr>`
       : filteredProducts.map(p=>`<tr>
           <td class="product-name-cell"><div class="pname">${p.product_name}</div><div class="pprice">${peso(p.price)}</div></td>
           <td class="product-stock-cell"><div class="stock-num">${p.quantity}</div>${stockBadge(p)}</td>
-          <td><button class="btn-adjust" onclick="window._openRestockModal(${p.product_id})">&#9881; Adjust</button></td>
+          ${isManager ? `<td><button class="btn-adjust" onclick="window._openRestockModal(${p.product_id})">&#9881; Adjust</button></td>` : ''}
         </tr>`).join('');
   }
 
@@ -235,7 +243,6 @@
     }
     const total=cartTotal();
     const today=new Date().toISOString().split('T')[0];
-    // ✅ FIX: use logged-in employee from session instead of fetching first employee
     const empId=Auth.getUser()?.employee_id||null;
     const {data:sale,error:sE}=await db.from('sale').insert({sale_date:today,total_amount:total,customer_id:customerId,employee_id:empId}).select('sale_id').single();
     if(sE){showToast('Error saving sale.','error');return;}
@@ -299,6 +306,8 @@
   };
 
   function openAddModal(){
+    // ✅ Extra safety guard — Cashiers should never reach here
+    if (!isManager) { showToast('Access restricted.', 'error'); return; }
     document.getElementById('modalSlot').innerHTML=`
       <div class="modal modal-open" id="modal">
         <div class="modal-box">
@@ -330,6 +339,8 @@
   }
 
   window._openRestockModal=function(pid){
+    // ✅ Extra safety guard — Cashiers should never reach here
+    if (!isManager) { showToast('Access restricted.', 'error'); return; }
     const p=PRODUCTS.find(x=>x.product_id===pid);
     if(!p)return;
     const today=new Date().toISOString().split('T')[0];
@@ -362,7 +373,6 @@
       const suppId=document.getElementById('f-sup').value;
       const date=document.getElementById('f-date').value;
       if(!suppId){showToast('Select a supplier.','error');return;}
-      // ✅ FIX: use logged-in employee from session instead of fetching first employee
       const empId=Auth.getUser()?.employee_id||null;
       const {data:supply,error:sE}=await db.from('supply').insert({supply_date:date,total_amount:qty*cost,supplier_id:parseInt(suppId),employee_id:empId}).select('supply_id').single();
       if(sE){showToast('Error.','error');return;}
@@ -371,7 +381,10 @@
     });
   };
 
-  document.getElementById('btn-add-product').addEventListener('click',openAddModal);
+  // ✅ Only attach btn-add-product listener if button exists (Managers only)
+  const btnAddProduct = document.getElementById('btn-add-product');
+  if (btnAddProduct) btnAddProduct.addEventListener('click', openAddModal);
+
   document.getElementById('search-products').addEventListener('input',applyProductFilters);
   document.getElementById('filter-category').addEventListener('change',applyProductFilters);
   document.getElementById('filter-stock').addEventListener('change',applyProductFilters);

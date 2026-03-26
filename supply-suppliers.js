@@ -12,6 +12,10 @@
   let filteredSuppliers = [], filteredSupplies = [];
   let activeTab = 'suppliers';
 
+  // ✅ Role check — Cashiers can view but cannot add/edit
+  const currentUser = Auth.getUser();
+  const isManager = currentUser.role === 'Manager';
+
   function showToast(msg, type = 'success') {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
@@ -28,7 +32,7 @@
         <h1 class="page-title">Supply &amp; Suppliers</h1>
         <div class="page-sub">Manage supply orders and supplier relationships</div>
       </div>
-      <button class="btn btn-amber" id="btn-add">+ Add Supplier</button>
+      ${isManager ? `<button class="btn btn-amber" id="btn-add">+ Add Supplier</button>` : ''}
     </div>
     <div style="display:flex;gap:4px;margin-bottom:28px;">
       <button id="tab-suppliers" onclick="window._switchTab('suppliers')" style="padding:7px 16px;border-radius:20px;border:none;font-family:'Barlow',sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer;background:var(--amber);color:#000;transition:all 0.15s;">Suppliers</button>
@@ -58,7 +62,9 @@
     document.getElementById('tab-suppliers').style.color=isSup?'#000':'var(--text-muted)';
     document.getElementById('tab-supplies').style.background=!isSup?'var(--amber)':'transparent';
     document.getElementById('tab-supplies').style.color=!isSup?'#000':'var(--text-muted)';
-    document.getElementById('btn-add').textContent=isSup?'+ Add Supplier':'+ New Supply Order';
+    // ✅ Only update button label if button exists (Managers only)
+    const btnAdd = document.getElementById('btn-add');
+    if (btnAdd) btnAdd.textContent = isSup ? '+ Add Supplier' : '+ New Supply Order';
   };
 
   async function loadLookups() {
@@ -127,6 +133,8 @@
   };
 
   function openAddSupplierModal(){
+    // ✅ Extra safety guard — Cashiers should never reach here
+    if (!isManager) { showToast('Access restricted.', 'error'); return; }
     document.getElementById('modalSlot').innerHTML=`
       <div class="modal modal-open" id="modal">
         <div class="modal-box">
@@ -153,6 +161,8 @@
   }
 
   function openNewSupplyModal(){
+    // ✅ Extra safety guard — Cashiers should never reach here
+    if (!isManager) { showToast('Access restricted.', 'error'); return; }
     const today=new Date().toISOString().split('T')[0];
     let supplyItems=[];
     function supplyTotal(){return supplyItems.reduce((s,i)=>s+i.qty*i.price,0);}
@@ -226,7 +236,14 @@
     });
   }
 
-  document.getElementById('btn-add').addEventListener('click',()=>{if(activeTab==='suppliers')openAddSupplierModal();else openNewSupplyModal();});
+  // ✅ Only attach btn-add listener if button exists (Managers only)
+  const btnAdd = document.getElementById('btn-add');
+  if (btnAdd) {
+    btnAdd.addEventListener('click', () => {
+      if (activeTab === 'suppliers') openAddSupplierModal();
+      else openNewSupplyModal();
+    });
+  }
 
   await loadLookups();
   await loadSuppliers();
