@@ -57,7 +57,13 @@
     <div id="toast" class="toast"></div>`;
 
   const style = document.createElement('style');
-  style.textContent = `.report-tab{padding:7px 16px;border-radius:20px;border:none;font-family:'Barlow',sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer;background:transparent;color:var(--text-muted);transition:all 0.15s;}.report-tab:hover{color:var(--text-sub);}.report-tab.active{background:var(--amber);color:#000;}`;
+  style.textContent = `
+    .report-tab{padding:7px 16px;border-radius:20px;border:none;font-family:'Barlow',sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer;background:transparent;color:var(--text-muted);transition:all 0.15s;}
+    .report-tab:hover{color:var(--text-sub);}
+    .report-tab.active{background:var(--amber);color:#000;}
+    #month-picker{background:#1a1a1a;color:#fff;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 12px;font-family:'Barlow',sans-serif;font-size:13px;cursor:pointer;outline:none;}
+    #month-picker:hover{border-color:var(--amber);}
+  `;
   document.head.appendChild(style);
 
   window._switchReport = function (tab) {
@@ -76,33 +82,120 @@
     if (tab === 'employee')  await loadEmployeeReport();
   }
 
-  async function loadSalesReport() {
+  async function loadSalesReport(selectedMonth) {
+    const now = new Date();
+    const curM = selectedMonth || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+    // Build month options — current month going back 12 months
+    const monthOptions = Array.from({length:12}, (_,i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = d.toLocaleString('en-PH', { month:'long', year:'numeric' });
+      return `<option value="${val}" ${val===curM?'selected':''}>${label}</option>`;
+    }).join('');
+
     const panel = document.getElementById('panel-sales');
-    panel.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="card"><div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fff;margin-bottom:16px;">Top Selling Products</div><div style="height:300px;"><canvas id="chart-top-products"></canvas></div></div>
-      <div class="card"><div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fff;margin-bottom:16px;">Sales by Category</div><div style="height:300px;display:flex;align-items:center;justify-content:center;"><canvas id="chart-sales-cat"></canvas></div></div>
-    </div>`;
-    const { data: saleItems } = await db.from('sale_item').select('quantity,product(product_name)');
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <label style="font-family:'Barlow',sans-serif;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;">Viewing Month:</label>
+        <select id="month-picker">${monthOptions}</select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card"><div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fff;margin-bottom:16px;">Top Selling Products <span style="font-size:11px;color:var(--amber);font-weight:600;">(by Sales ₱)</span></div><div style="height:300px;"><canvas id="chart-top-products"></canvas></div></div>
+        <div class="card"><div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fff;margin-bottom:16px;">Sales by Category</div><div style="height:300px;display:flex;align-items:center;justify-content:center;"><canvas id="chart-sales-cat"></canvas></div></div>
+      </div>`;
+
+    document.getElementById('month-picker').addEventListener('change', (e) => {
+      destroyChart('top-products');
+      destroyChart('sales-cat');
+      loadSalesReport(e.target.value);
+    });
+
+    // Fetch all sales + items then filter by selected month
+    const { data: allSales } = await db.from('sale').select('sale_id,sale_date');
+    const { data: allSaleItems } = await db.from('sale_item').select('quantity,unit_price,sale_id,product_id,product(product_name,category(category_name))');
+
+    const saleIdsInMonth = new Set((allSales||[]).filter(s => (s.sale_date||'').startsWith(curM)).map(s => s.sale_id));
+    const saleItems = (allSaleItems||[]).filter(si => saleIdsInMonth.has(si.sale_id));
+
+    // Top products by ₱ sales
     const productTotals = {};
-    (saleItems||[]).forEach(si => { const name = si.product?.product_name||'Unknown'; productTotals[name] = (productTotals[name]||0) + si.quantity; });
+    saleItems.forEach(si => {
+      const name = si.product?.product_name || 'Unknown';
+      productTotals[name] = (productTotals[name]||0) + ((si.quantity||0) * parseFloat(si.unit_price||0));
+    });
     const sorted = Object.entries(productTotals).sort((a,b) => b[1]-a[1]).slice(0,5);
-    const { data: products } = await db.from('product').select('product_id,product_name,category(category_name)');
-    const { data: saleItems2 } = await db.from('sale_item').select('quantity,unit_price,product_id');
+
+    // Category totals by ₱ sales
     const catTotals = {};
-    (saleItems2||[]).forEach(si => {
-      const p = (products||[]).find(x => x.product_id === si.product_id);
-      const cat = p?.category?.category_name||'Other';
-      catTotals[cat] = (catTotals[cat]||0) + (si.quantity * si.unit_price);
+    saleItems.forEach(si => {
+      const cat = si.product?.category?.category_name || 'Other';
+      catTotals[cat] = (catTotals[cat]||0) + ((si.quantity||0) * parseFloat(si.unit_price||0));
     });
     const catEntries = Object.entries(catTotals);
     const PIE_COLORS = ['#f5a623','#4caf50','#2196f3','#e53935','#9c27b0','#00bcd4'];
-    destroyChart('top-products'); destroyChart('sales-cat');
+
+    destroyChart('top-products');
+    destroyChart('sales-cat');
+
     const ctx1 = document.getElementById('chart-top-products')?.getContext('2d');
-    if (ctx1 && sorted.length) charts['top-products'] = new Chart(ctx1, { type:'bar', data:{ labels:sorted.map(([n])=>n), datasets:[{ data:sorted.map(([,v])=>v), backgroundColor:'#f5a623', borderRadius:4, borderSkipped:false }] }, options:{...CHART_DEFAULTS} });
-    else if (ctx1) ctx1.canvas.parentElement.innerHTML = `<div class="empty-state">No sales data yet.</div>`;
+    if (ctx1 && sorted.length) {
+      charts['top-products'] = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: sorted.map(([n]) => n),
+          datasets: [{ data: sorted.map(([,v]) => v), backgroundColor: '#f5a623', borderRadius: 4, borderSkipped: false }]
+        },
+        options: {
+          ...CHART_DEFAULTS,
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', font: { family: "'Barlow',sans-serif", size: 11 } } },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                color: '#888',
+                font: { family: "'Barlow',sans-serif", size: 11 },
+                callback: (v) => '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ' ₱' + ctx.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              }
+            }
+          }
+        }
+      });
+    } else if (ctx1) {
+      ctx1.canvas.parentElement.innerHTML = `<div class="empty-state">No sales data for this month.</div>`;
+    }
+
     const ctx2 = document.getElementById('chart-sales-cat')?.getContext('2d');
-    if (ctx2 && catEntries.length) charts['sales-cat'] = new Chart(ctx2, { type:'pie', data:{ labels:catEntries.map(([n])=>n), datasets:[{ data:catEntries.map(([,v])=>v), backgroundColor:PIE_COLORS, borderWidth:0 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ display:true, position:'right', labels:{ color:'#888', font:{ family:"'Barlow',sans-serif", size:11 }, boxWidth:12 } } } } });
-    else if (ctx2) ctx2.canvas.parentElement.innerHTML = `<div class="empty-state">No category data yet.</div>`;
+    if (ctx2 && catEntries.length) {
+      charts['sales-cat'] = new Chart(ctx2, {
+        type: 'pie',
+        data: {
+          labels: catEntries.map(([n]) => n),
+          datasets: [{ data: catEntries.map(([,v]) => v), backgroundColor: PIE_COLORS, borderWidth: 0 }]
+        },
+        options: {
+          maintainAspectRatio: false, responsive: true,
+          plugins: {
+            legend: { display: true, position: 'right', labels: { color: '#888', font: { family: "'Barlow',sans-serif", size: 11 }, boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ' ₱' + ctx.parsed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              }
+            }
+          }
+        }
+      });
+    } else if (ctx2) {
+      ctx2.canvas.parentElement.innerHTML = `<div class="empty-state">No category data for this month.</div>`;
+    }
   }
 
   async function loadInventoryReport() {
@@ -155,7 +248,7 @@
   document.head.appendChild(script);
 
   // ================================================================
-  //  EXCEL EXPORT — Monthly Sales Report (current month only)
+  //  EXCEL EXPORT — Monthly Sales Report (uses selected month)
   // ================================================================
 
   document.getElementById('btn-export-excel').addEventListener('click', async () => {
@@ -178,10 +271,13 @@
 
       btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Building Excel...`;
 
-      const now       = new Date();
-      const curM      = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-      const monthLabel= now.toLocaleString('en-PH', { month:'long', year:'numeric' });
-      const COGS_RATE = 0.60; // estimated cost = 60% of unit price
+      const now        = new Date();
+      // Use selected month from picker if available, else current month
+      const picker     = document.getElementById('month-picker');
+      const curM       = picker ? picker.value : `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const [yr, mo]   = curM.split('-');
+      const monthLabel = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleString('en-PH', { month:'long', year:'numeric' });
+      const COGS_RATE  = 0.60;
 
       // ── Fetch all needed data ──
       const [
@@ -198,24 +294,20 @@
         db.from('employee').select('employee_id,full_name,role(role_name)'),
       ]);
 
-      // ── Filter to current month only ──
-      const curSales    = (allSales||[]).filter(s => (s.sale_date||'').startsWith(curM));
-      const curSaleIds  = new Set(curSales.map(s => s.sale_id));
-      const curSaleItems= (allSaleItems||[]).filter(si => curSaleIds.has(si.sale_id));
+      // ── Filter to selected month ──
+      const curSales     = (allSales||[]).filter(s => (s.sale_date||'').startsWith(curM));
+      const curSaleIds   = new Set(curSales.map(s => s.sale_id));
+      const curSaleItems = (allSaleItems||[]).filter(si => curSaleIds.has(si.sale_id));
 
-      // Returns that belong to a sale_item from a current-month sale
       const curReturnItems = (allReturns||[]).filter(r => {
         const sid = r.sale_item?.sale_id;
         return curSaleIds.has(sid);
       });
 
-      // Low/out of stock
       const lowStockList = (allProducts||[])
         .filter(p => (p.quantity||0) <= (p.reorder_level||0))
         .sort((a,b) => (a.quantity||0) - (b.quantity||0));
 
-      // ── Aggregate product-level data for current month ──
-      // prodData[product_name] = { cat, brand, unitPrice, unitsSold, grossSales, cost, grossProfit }
       const prodData = {};
       curSaleItems.forEach(si => {
         const name  = si.product?.product_name || 'Unknown';
@@ -226,13 +318,12 @@
         const rev   = price * qty;
         const cost  = rev * COGS_RATE;
         if (!prodData[name]) prodData[name] = { cat, brd, unitPrice:price, unitsSold:0, grossSales:0, cost:0, grossProfit:0 };
-        prodData[name].unitsSold    += qty;
-        prodData[name].grossSales   += rev;
-        prodData[name].cost         += cost;
-        prodData[name].grossProfit  += rev - cost;
+        prodData[name].unitsSold   += qty;
+        prodData[name].grossSales  += rev;
+        prodData[name].cost        += cost;
+        prodData[name].grossProfit += rev - cost;
       });
 
-      // ── Category-level rollup ──
       const catData = {};
       Object.values(prodData).forEach(d => {
         const c = d.cat;
@@ -242,24 +333,20 @@
         catData[c].cost        += d.cost;
         catData[c].grossProfit += d.grossProfit;
       });
-      // attach product list per category
       Object.entries(prodData).forEach(([name, d]) => {
         if (catData[d.cat]) catData[d.cat].products.push({ name, ...d });
       });
-      // sort products within each category by grossSales desc
       Object.values(catData).forEach(cd => cd.products.sort((a,b) => b.grossSales - a.grossSales));
 
       const catList = Object.entries(catData).sort((a,b) => b[1].grossSales - a[1].grossSales);
       const topCat  = catList.length ? catList[0][0] : '—';
 
-      // ── Grand totals ──
       const grandSales  = curSaleItems.reduce((a,si) => a + (si.quantity||0)*parseFloat(si.unit_price||0), 0);
       const grandCost   = grandSales * COGS_RATE;
       const grandProfit = grandSales - grandCost;
       const grandUnits  = curSaleItems.reduce((a,si) => a + (si.quantity||0), 0);
       const grandOrders = curSales.length;
 
-      // ── Return reason summary ──
       const reasonMap = {};
       curReturnItems.forEach(r => {
         const reason = (r.reason||'Unspecified').trim();
@@ -267,10 +354,9 @@
         reasonMap[reason].count += 1;
         reasonMap[reason].qty   += r.quantity || 0;
       });
-      const reasonList = Object.entries(reasonMap).sort((a,b) => b[1].qty - a[1].qty);
+      const reasonList     = Object.entries(reasonMap).sort((a,b) => b[1].qty - a[1].qty);
       const totalReturnQty = curReturnItems.reduce((a,r) => a+(r.quantity||0), 0);
 
-      // Employee sales for current month
       const empSalesMap = {};
       curSales.forEach(s => {
         const n = s.employee?.full_name || 'Unknown';
@@ -278,7 +364,7 @@
         empSalesMap[n].rev    += parseFloat(s.total_amount||0);
         empSalesMap[n].orders += 1;
       });
-      const empList = Object.entries(empSalesMap).sort((a,b) => b[1].rev - a[1].rev);
+      const empList  = Object.entries(empSalesMap).sort((a,b) => b[1].rev - a[1].rev);
       const empRoles = {};
       (allEmployees||[]).forEach(e => { empRoles[e.full_name] = e.role?.role_name||'—'; });
 
@@ -293,7 +379,7 @@
         LT   : fl('E8F5E9'), MINT : fl('F9FBE7'), WHITE: fl('FFFFFF'),
         GRAY : fl('F5F5F5'), DGRAY: fl('EEEEEE'),
         RED  : fl('FFEBEE'), AMB  : fl('FFF8E1'), LBLU : fl('E3F2FD'),
-        CATBG: fl('EDF7ED'), // slightly tinted category header rows
+        CATBG: fl('EDF7ED'),
       };
 
       const tb = c => ({ style:'thin', color:{rgb:c||'C8E6C9'} });
@@ -316,7 +402,7 @@
         red   : fn(9,  true,  'B71C1C'),
         amb   : fn(9,  true,  'E65100'),
         muted : fn(8,  false, '999999', true),
-        catLbl: fn(9,  true,  '1B5E20'),  // category subtotal label
+        catLbl: fn(9,  true,  '1B5E20'),
         rank  : fn(11, true,  '1B5E20'),
       };
 
@@ -339,7 +425,6 @@
       }
       function rh(n) { return Array.from({length:n},(_,i)=>({hpt:i===0?22:i===1?13:17})); }
 
-      // Shared helpers
       function titleBar(ws,text,cols) {
         wc(ws,0,0,text, st(F.DK,FN.title,'left',null,B.N)); mg(ws,0,0,0,cols-1);
         wc(ws,1,0,`${monthLabel}   |   Generated: ${now.toLocaleString('en-PH')}   |   Joe Hardware & Motorparts`,
@@ -362,21 +447,15 @@
         wc(ws,r,0,text,st(F.WHITE,FN.muted,'left',null,B.N)); mg(ws,r,0,r,cols-1);
       }
 
-      // ================================================================
-      //  SHEET 1 — MONTHLY SALES REPORT  (summary metrics)
-      // ================================================================
       function buildMonthlySummary() {
         const ws={}; ws['!merges']=[];
         ws['!cols']=[{wch:28},{wch:18},{wch:1.5},{wch:28},{wch:18}];
         titleBar(ws,'MONTHLY SALES REPORT',5);
-
-        // ── Left column: Sales metrics ──
         secHdr(ws,3,'SALES METRICS',0,1);
         wc(ws,3,2,'',st(F.WHITE,FN.lbl,'left',null,B.N));
         secHdr(ws,3,'PERFORMANCE SUMMARY',3,4);
-
         const METRICS = [
-          { lbl:'Total Monthly Sales',  val:grandSales,  fmt:PHP },
+          { lbl:'Total Monthly Sales',   val:grandSales,  fmt:PHP },
           { lbl:'Total Cost (est. 60%)', val:grandCost,   fmt:PHP },
           { lbl:'Gross Profit',          val:grandProfit, fmt:PHP },
           { lbl:'Gross Margin %',        val:grandSales>0?Math.round((grandProfit/grandSales)*1000)/1000:0, fmt:PCT },
@@ -384,16 +463,12 @@
           { lbl:'Total Orders',          val:grandOrders, fmt:NUM },
           { lbl:'Avg Order Value',       val:grandOrders?grandSales/grandOrders:0, fmt:PHP },
         ];
-
         METRICS.forEach((m,i)=>{
-          const r  = 4+i;
-          const rf = i%2===0?F.WHITE:F.MINT;
+          const r=4+i, rf=i%2===0?F.WHITE:F.MINT;
           wc(ws,r,0,m.lbl, st(rf,FN.lbl,'left',null,B.G));
           wc(ws,r,1,m.val, st(rf,FN.numB,'right',m.fmt,B.G));
           wc(ws,r,2,'',    st(F.WHITE,FN.lbl,'left',null,B.N));
         });
-
-        // ── Right column: Performance summary ──
         const PERF = [
           { lbl:'Top Selling Category', val:topCat },
           { lbl:'Total Products Sold',  val:`${Object.keys(prodData).length} product(s)` },
@@ -403,88 +478,65 @@
           { lbl:'Top Employee Revenue', val:empList.length?empList[0][1].rev:0, fmt:PHP },
           { lbl:'Report Period',        val:monthLabel },
         ];
-
         PERF.forEach((p,i)=>{
-          const r  = 4+i;
-          const rf = i%2===0?F.WHITE:F.MINT;
-          const isLow = p.lbl==='Low / Out of Stock' && lowStockList.length>0;
+          const r=4+i, rf=i%2===0?F.WHITE:F.MINT;
+          const isLow=p.lbl==='Low / Out of Stock'&&lowStockList.length>0;
           wc(ws,r,3,p.lbl, st(rf,FN.lblB,'left',null,B.G));
-          if(typeof p.val==='number')
-            wc(ws,r,4,p.val, st(rf,FN.numB,'right',p.fmt,B.G));
-          else
-            wc(ws,r,4,p.val, st(rf,isLow?FN.amb:FN.lbl,'left',null,B.G));
+          if(typeof p.val==='number') wc(ws,r,4,p.val, st(rf,FN.numB,'right',p.fmt,B.G));
+          else wc(ws,r,4,p.val, st(rf,isLow?FN.amb:FN.lbl,'left',null,B.G));
         });
-
         ws['!rows']=rh(4+Math.max(METRICS.length,PERF.length)+1);
         return ws;
       }
 
-      // ================================================================
-      //  SHEET 2 — PRODUCT SALES  (all sold products this month,
-      //            grouped by category with subtotals)
-      // ================================================================
       function buildProductSales() {
         const ws={}; ws['!merges']=[];
         ws['!cols']=[{wch:5},{wch:30},{wch:16},{wch:12},{wch:14},{wch:14},{wch:14},{wch:12}];
         const COLS=8;
-        titleBar(ws,'PRODUCT SALES — CURRENT MONTH',COLS);
+        titleBar(ws,'PRODUCT SALES — '+monthLabel.toUpperCase(),COLS);
         secHdr(ws,3,'ALL PRODUCTS SOLD THIS MONTH (grouped by category)',0,COLS-1);
         colHdrs(ws,4,['#','Product Name','Category','Units Sold','Unit Price','Gross Sales','Cost (60%)','Gross Profit'],0,
           ['center','left','left','right','right','right','right','right']);
-
         let row=5, rank=0;
-        const grandGS = grandSales, grandC = grandCost, grandGP = grandProfit;
-
         catList.forEach(([catName, cd])=>{
-          // Products in this category
           cd.products.forEach(p=>{
             rank++;
-            const rf = rank%2===0?F.MINT:F.WHITE;
-            wc(ws,row,0,rank,              st(rf,FN.lbl,'center',null,B.G));
-            wc(ws,row,1,p.name,            st(rf,FN.lblB,'left',null,B.G));
-            wc(ws,row,2,p.cat,             st(rf,FN.lbl,'left',null,B.G));
-            wc(ws,row,3,p.unitsSold,       st(rf,FN.lbl,'right',NUM,B.G));
-            wc(ws,row,4,parseFloat(p.unitPrice),st(rf,FN.lbl,'right',PHP,B.G));
+            const rf=rank%2===0?F.MINT:F.WHITE;
+            wc(ws,row,0,rank,                    st(rf,FN.lbl,'center',null,B.G));
+            wc(ws,row,1,p.name,                  st(rf,FN.lblB,'left',null,B.G));
+            wc(ws,row,2,p.cat,                   st(rf,FN.lbl,'left',null,B.G));
+            wc(ws,row,3,p.unitsSold,             st(rf,FN.lbl,'right',NUM,B.G));
+            wc(ws,row,4,parseFloat(p.unitPrice), st(rf,FN.lbl,'right',PHP,B.G));
             wc(ws,row,5,parseFloat(p.grossSales),st(rf,FN.numB,'right',PHP,B.G));
             wc(ws,row,6,parseFloat(p.cost),      st(rf,FN.lbl,'right',PHP,B.G));
             wc(ws,row,7,parseFloat(p.grossProfit),st(rf,FN.numB,'right',PHP,B.G));
             row++;
           });
-
-          // Category subtotal row
-          wc(ws,row,0,'',                          st(F.CATBG,FN.catLbl,'left',null,B.D));
-          wc(ws,row,1,`  ${catName} — Subtotal`,   st(F.CATBG,FN.catLbl,'left',null,B.D));
-          wc(ws,row,2,'',                          st(F.CATBG,FN.catLbl,'left',null,B.D));
-          wc(ws,row,3,cd.unitsSold,                st(F.CATBG,FN.catLbl,'right',NUM,B.D));
-          wc(ws,row,4,'',                          st(F.CATBG,FN.catLbl,'left',null,B.D));
-          wc(ws,row,5,parseFloat(cd.grossSales),   st(F.CATBG,FN.catLbl,'right',PHP,B.D));
-          wc(ws,row,6,parseFloat(cd.cost),         st(F.CATBG,FN.catLbl,'right',PHP,B.D));
-          wc(ws,row,7,parseFloat(cd.grossProfit),  st(F.CATBG,FN.catLbl,'right',PHP,B.D));
+          wc(ws,row,0,'',                        st(F.CATBG,FN.catLbl,'left',null,B.D));
+          wc(ws,row,1,`  ${catName} — Subtotal`, st(F.CATBG,FN.catLbl,'left',null,B.D));
+          wc(ws,row,2,'',                        st(F.CATBG,FN.catLbl,'left',null,B.D));
+          wc(ws,row,3,cd.unitsSold,              st(F.CATBG,FN.catLbl,'right',NUM,B.D));
+          wc(ws,row,4,'',                        st(F.CATBG,FN.catLbl,'left',null,B.D));
+          wc(ws,row,5,parseFloat(cd.grossSales), st(F.CATBG,FN.catLbl,'right',PHP,B.D));
+          wc(ws,row,6,parseFloat(cd.cost),       st(F.CATBG,FN.catLbl,'right',PHP,B.D));
+          wc(ws,row,7,parseFloat(cd.grossProfit),st(F.CATBG,FN.catLbl,'right',PHP,B.D));
           row++;
         });
-
-        // Grand total
         totalRow(ws,row,COLS,[
           {c:1,v:'GRAND TOTAL'},
           {c:3,v:grandUnits,fmt:NUM},
-          {c:5,v:parseFloat(grandGS),fmt:PHP},
-          {c:6,v:parseFloat(grandC),fmt:PHP},
-          {c:7,v:parseFloat(grandGP),fmt:PHP},
+          {c:5,v:parseFloat(grandSales),fmt:PHP},
+          {c:6,v:parseFloat(grandCost),fmt:PHP},
+          {c:7,v:parseFloat(grandProfit),fmt:PHP},
         ]);
         row++;
-
         if(!catList.length) emptyNote(ws,5,'No sales recorded this month.',COLS);
-
         wc(ws,row+1,0,'* Cost is estimated at 60% of unit price. Gross Profit = Gross Sales − Cost.',
           st(F.WHITE,FN.muted,'left',null,B.N)); mg(ws,row+1,0,row+1,COLS-1);
-
         ws['!rows']=rh(row+3);
         return ws;
       }
 
-      // ================================================================
-      //  SHEET 3 — LOW STOCK / OUT OF STOCK
-      // ================================================================
       function buildLowStock() {
         const ws={}; ws['!merges']=[];
         ws['!cols']=[{wch:5},{wch:30},{wch:18},{wch:14},{wch:14},{wch:14}];
@@ -493,7 +545,6 @@
         secHdr(ws,3,`ITEMS AT OR BELOW REORDER LEVEL  (${lowStockList.length} item${lowStockList.length!==1?'s':''})`,0,COLS-1);
         colHdrs(ws,4,['#','Product Name','Category','Qty in Stock','Reorder Level','Status'],0,
           ['center','left','left','right','right','center']);
-
         lowStockList.forEach((p,i)=>{
           const r=5+i, isOut=(p.quantity||0)<=0;
           const rf=isOut?F.RED:F.AMB, f=isOut?FN.red:FN.amb;
@@ -504,50 +555,38 @@
           wc(ws,r,4,p.reorder_level||0,             st(rf,f,'right',NUM,B.G));
           wc(ws,r,5,isOut?'OUT OF STOCK':'LOW STOCK',st(rf,f,'center',null,B.G));
         });
-
         if(!lowStockList.length){
           wc(ws,5,0,'✓ All products are above their reorder levels.',st(F.LT,FN.grn,'left',null,B.N));
           mg(ws,5,0,5,COLS-1);
         }
-
         const noteR=5+lowStockList.length+1;
         wc(ws,noteR,0,'Red = Out of stock (qty = 0).  Amber = Low stock (qty ≤ reorder level).',
           st(F.WHITE,FN.muted,'left',null,B.N)); mg(ws,noteR,0,noteR,COLS-1);
-
         ws['!rows']=rh(noteR+1);
         return ws;
       }
 
-      // ================================================================
-      //  SHEET 4 — RETURNS  (current month, with reason breakdown)
-      // ================================================================
       function buildReturns() {
         const ws={}; ws['!merges']=[];
         ws['!cols']=[{wch:10},{wch:14},{wch:28},{wch:18},{wch:12},{wch:14},{wch:34}];
         const COLS=7;
-        titleBar(ws,'RETURNS — CURRENT MONTH',COLS);
-
-        // ── Reason summary block ──
+        titleBar(ws,'RETURNS — '+monthLabel.toUpperCase(),COLS);
         secHdr(ws,3,'RETURN REASON SUMMARY',0,COLS-1);
         colHdrs(ws,4,['Reason','# Incidents','Total Units Returned','% of Returns'],0,
           ['left','center','right','right']);
-
         reasonList.forEach(([reason,d],i)=>{
           const r=5+i, rf=i%2===0?F.WHITE:F.MINT;
           const share=totalReturnQty>0?d.qty/totalReturnQty:0;
-          wc(ws,r,0,reason,     st(rf,FN.lblB,'left',null,B.G));
-          wc(ws,r,1,d.count,    st(rf,FN.lbl,'center',NUM,B.G));
-          wc(ws,r,2,d.qty,      st(rf,FN.lbl,'right',NUM,B.G));
+          wc(ws,r,0,reason,  st(rf,FN.lblB,'left',null,B.G));
+          wc(ws,r,1,d.count, st(rf,FN.lbl,'center',NUM,B.G));
+          wc(ws,r,2,d.qty,   st(rf,FN.lbl,'right',NUM,B.G));
           wc(ws,r,3,parseFloat(Math.round(share*1000)/1000),st(rf,FN.lbl,'right',PCT,B.G));
-          // blank remaining cols
           for(let c=4;c<COLS;c++) wc(ws,r,c,'',st(rf,FN.lbl,'left',null,B.G));
         });
-
         if(!reasonList.length){
           wc(ws,5,0,'No returns recorded this month.',st(F.LT,FN.grn,'left',null,B.N));
           mg(ws,5,0,5,COLS-1);
         }
-
         const totR=5+reasonList.length;
         totalRow(ws,totR,COLS,[
           {c:0,v:'TOTAL'},
@@ -555,38 +594,30 @@
           {c:2,v:totalReturnQty,fmt:NUM},
           {c:3,v:1,fmt:PCT},
         ]);
-
-        // ── Individual return records ──
         const detailR=totR+2;
         secHdr(ws,detailR,'RETURN DETAILS',0,COLS-1);
         colHdrs(ws,detailR+1,['Return ID','Return Date','Product','Category','Qty','Unit Price','Reason'],0,
           ['center','left','left','left','right','right','left']);
-
         curReturnItems.forEach((r,i)=>{
           const row=detailR+2+i, rf=i%2===0?F.WHITE:F.RED;
-          wc(ws,row,0,r.return_id,                             st(rf,FN.lbl,'center',null,B.G));
-          wc(ws,row,1,r.return_date||'—',                     st(rf,FN.lbl,'left',null,B.G));
-          wc(ws,row,2,r.sale_item?.product?.product_name||'—',st(rf,FN.lblB,'left',null,B.G));
-          wc(ws,row,3,r.sale_item?.product?.category?.category_name||'—',st(rf,FN.lbl,'left',null,B.G));
-          wc(ws,row,4,r.quantity||0,                          st(rf,FN.lbl,'right',NUM,B.G));
-          wc(ws,row,5,parseFloat(r.sale_item?.unit_price||0), st(rf,FN.lbl,'right',PHP,B.G));
-          wc(ws,row,6,r.reason||'—',                          st(rf,FN.lbl,'left',null,B.G));
+          wc(ws,row,0,r.return_id,                                          st(rf,FN.lbl,'center',null,B.G));
+          wc(ws,row,1,r.return_date||'—',                                   st(rf,FN.lbl,'left',null,B.G));
+          wc(ws,row,2,r.sale_item?.product?.product_name||'—',              st(rf,FN.lblB,'left',null,B.G));
+          wc(ws,row,3,r.sale_item?.product?.category?.category_name||'—',   st(rf,FN.lbl,'left',null,B.G));
+          wc(ws,row,4,r.quantity||0,                                        st(rf,FN.lbl,'right',NUM,B.G));
+          wc(ws,row,5,parseFloat(r.sale_item?.unit_price||0),               st(rf,FN.lbl,'right',PHP,B.G));
+          wc(ws,row,6,r.reason||'—',                                        st(rf,FN.lbl,'left',null,B.G));
         });
-
         ws['!rows']=rh(detailR+2+curReturnItems.length+1);
         return ws;
       }
 
-      // ================================================================
-      //  BUILD WORKBOOK — 4 focused sheets only
-      // ================================================================
       XLSX.utils.book_append_sheet(wb, buildMonthlySummary(), '📊 Monthly Sales Report');
       XLSX.utils.book_append_sheet(wb, buildProductSales(),   '🧾 Product Sales');
       XLSX.utils.book_append_sheet(wb, buildLowStock(),       '⚠ Low & Out of Stock');
       XLSX.utils.book_append_sheet(wb, buildReturns(),        '🔄 Returns');
 
-      const dateStr = now.toISOString().slice(0,10);
-      XLSX.writeFile(wb, `JoexHardware_Monthly_${curM}.xlsx`, { bookType:'xlsx', type:'binary', cellStyles:true });
+      XLSX.writeFile(wb, `JoexHardware_${curM}.xlsx`, { bookType:'xlsx', type:'binary', cellStyles:true });
       showToast('✅ Excel report downloaded!', 'success');
 
     } catch (err) {
