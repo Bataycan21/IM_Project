@@ -81,7 +81,7 @@
             <div class="sale-summary-footer">
               <div class="sale-total-row">
                 <div class="sale-total-label">Total</div>
-                <div class="sale-total-amount" id="cart-total">$0.00</div>
+                <div class="sale-total-amount" id="cart-total">₱0.00</div>
               </div>
               <button class="btn-complete-sale" id="btn-complete-sale">Complete Sale</button>
               <button class="btn-clear-cart" id="btn-clear-cart">Clear Cart</button>
@@ -131,47 +131,62 @@
       CATEGORIES.map(c=>`<button class="category-pill" onclick="window._filterPosCategory('${c.category_id}')">${c.category_name}</button>`).join('');
   }
 
+  // ✅ FIX: removed ambiguous unit(unit_type) join — product table has 3 FKs to unit
+  // (unit_id, sale_unit_id, purchase_unit_id) which causes Supabase to throw an
+  // "ambiguous relationship" error. Units are resolved via the UNITS lookup array instead.
   async function loadProducts() {
-    const { data } = await db.from('product')
-      .select('*, category(category_name), brand(brand_name), unit(unit_type), sale_unit:sale_unit_id(unit_type), purchase_unit:purchase_unit_id(unit_type)')
+    const { data, error } = await db.from('product')
+      .select('*, category(category_name), brand(brand_name)')
       .order('product_name');
-    PRODUCTS = data||[]; filteredProducts=[...PRODUCTS]; posFiltered=[...PRODUCTS];
-    renderProductTable(); renderPosGrid();
+    if (error) { console.error('loadProducts error:', error); }
+    PRODUCTS = (data||[]).map(p => ({
+      ...p,
+      sale_unit:     UNITS.find(u => u.unit_id === p.sale_unit_id)     || null,
+      purchase_unit: UNITS.find(u => u.unit_id === p.purchase_unit_id) || null,
+      unit:          UNITS.find(u => u.unit_id === p.unit_id)          || null,
+    }));
+    filteredProducts = [...PRODUCTS];
+    posFiltered      = [...PRODUCTS];
+    renderProductTable();
+    renderPosGrid();
     document.getElementById('pos-sale-id').textContent = `SALE #${Math.floor(Math.random()*9000+1000)}`;
   }
 
   function applyProductFilters() {
-    const q=(document.getElementById('search-products')?.value||'').toLowerCase();
-    const cat=document.getElementById('filter-category')?.value||'';
-    const stk=document.getElementById('filter-stock')?.value||'';
-    filteredProducts=PRODUCTS.filter(p=>{
-      const mQ=!q||p.product_name.toLowerCase().includes(q);
-      const mC=!cat||String(p.category_id)===cat;
-      const mS=!stk||(stk==='ok'&&p.quantity>p.reorder_level)||(stk==='low'&&p.quantity>0&&p.quantity<=p.reorder_level)||(stk==='out'&&p.quantity<=0);
-      return mQ&&mC&&mS;
+    const q   = (document.getElementById('search-products')?.value||'').toLowerCase();
+    const cat = document.getElementById('filter-category')?.value||'';
+    const stk = document.getElementById('filter-stock')?.value||'';
+    filteredProducts = PRODUCTS.filter(p => {
+      const mQ = !q   || p.product_name.toLowerCase().includes(q);
+      const mC = !cat || String(p.category_id) === cat;
+      const mS = !stk
+        || (stk==='ok'  && p.quantity > p.reorder_level)
+        || (stk==='low' && p.quantity > 0 && p.quantity <= p.reorder_level)
+        || (stk==='out' && p.quantity <= 0);
+      return mQ && mC && mS;
     });
     renderProductTable();
   }
 
   function stockBadge(p) {
-    if (p.quantity<=0) return `<span class="badge badge-out-stock">Out of Stock</span>`;
-    if (p.quantity<=p.reorder_level) return `<span class="badge badge-low-stock">Low Stock</span>`;
+    if (p.quantity <= 0)              return `<span class="badge badge-out-stock">Out of Stock</span>`;
+    if (p.quantity <= p.reorder_level) return `<span class="badge badge-low-stock">Low Stock</span>`;
     return `<span class="badge badge-in-stock">In Stock</span>`;
   }
 
-  // Helper: get unit label for display
   function unitLabel(p) {
-    const saleUnit = p.sale_unit?.unit_type || p.unit?.unit_type || 'units';
+    const saleUnit     = p.sale_unit?.unit_type     || p.unit?.unit_type || 'units';
     const purchaseUnit = p.purchase_unit?.unit_type || p.unit?.unit_type || 'units';
-    if (saleUnit !== purchaseUnit) return `<span style="font-size:10px;color:var(--amber);margin-left:4px;">sell:${saleUnit} / buy:${purchaseUnit} (×${p.conversion_factor||1})</span>`;
+    if (saleUnit !== purchaseUnit)
+      return `<span style="font-size:10px;color:var(--amber);margin-left:4px;">sell:${saleUnit} / buy:${purchaseUnit} (×${p.conversion_factor||1})</span>`;
     return `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">${saleUnit}</span>`;
   }
 
   function renderProductTable() {
     document.getElementById('catalog-count').textContent = `${filteredProducts.length} of ${PRODUCTS.length} products`;
     document.getElementById('product-tbody').innerHTML = !filteredProducts.length
-      ? `<tr><td colspan="${isManager ? 3 : 2}" class="td-muted" style="text-align:center;padding:32px;">No products found.</td></tr>`
-      : filteredProducts.map(p=>`<tr>
+      ? `<tr><td colspan="${isManager?3:2}" class="td-muted" style="text-align:center;padding:32px;">No products found.</td></tr>`
+      : filteredProducts.map(p => `<tr>
           <td class="product-name-cell">
             <div class="pname">${p.product_name}</div>
             <div class="pprice">${peso(p.price)} ${unitLabel(p)}</div>
@@ -184,30 +199,30 @@
         </tr>`).join('');
   }
 
-  window._filterPosCategory=function(catId){
-    activeCategory=catId;
-    document.querySelectorAll('.category-pill').forEach(p=>{
-      const m=p.getAttribute('onclick').match(/'([^']+)'/);
-      p.classList.toggle('active',m?.[1]===catId);
+  window._filterPosCategory = function(catId) {
+    activeCategory = catId;
+    document.querySelectorAll('.category-pill').forEach(p => {
+      const m = p.getAttribute('onclick').match(/'([^']+)'/);
+      p.classList.toggle('active', m?.[1] === catId);
     });
     filterPosGrid();
   };
 
-  function filterPosGrid(){
-    const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
-    posFiltered=PRODUCTS.filter(p=>{
-      const mC=activeCategory==='ALL'||String(p.category_id)===activeCategory;
-      const mQ=!q||p.product_name.toLowerCase().includes(q);
-      return mC&&mQ;
+  function filterPosGrid() {
+    const q = (document.getElementById('pos-search')?.value||'').toLowerCase();
+    posFiltered = PRODUCTS.filter(p => {
+      const mC = activeCategory === 'ALL' || String(p.category_id) === activeCategory;
+      const mQ = !q || p.product_name.toLowerCase().includes(q);
+      return mC && mQ;
     });
     renderPosGrid();
   }
 
-  function renderPosGrid(){
-    const el=document.getElementById('pos-product-grid');
-    if(!el)return;
-    if(!posFiltered.length){el.innerHTML=`<div class="empty-state" style="grid-column:1/-1;">No products found.</div>`;return;}
-    el.innerHTML=posFiltered.map(p=>`
+  function renderPosGrid() {
+    const el = document.getElementById('pos-product-grid');
+    if (!el) return;
+    if (!posFiltered.length) { el.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">No products found.</div>`; return; }
+    el.innerHTML = posFiltered.map(p => `
       <div class="pos-product-card${p.quantity<=0?' disabled':''}" onclick="window._addToCart(${p.product_id})">
         <div class="pos-product-category">${p.category?.category_name||''}</div>
         <div class="pos-product-name">${p.product_name}</div>
@@ -218,13 +233,13 @@
       </div>`).join('');
   }
 
-  function cartTotal(){return cart.reduce((s,i)=>s+i.quantity*i.unit_price,0);}
+  function cartTotal() { return cart.reduce((s,i) => s + i.quantity * i.unit_price, 0); }
 
-  function renderCart(){
-    document.getElementById('cart-total').textContent=peso(cartTotal());
-    const body=document.getElementById('cart-body');
-    if(!cart.length){body.innerHTML=`<div class="cart-empty"><div class="cart-icon">&#128722;</div><div class="cart-text">Cart is empty</div></div>`;return;}
-    body.innerHTML=cart.map((item,idx)=>`
+  function renderCart() {
+    document.getElementById('cart-total').textContent = peso(cartTotal());
+    const body = document.getElementById('cart-body');
+    if (!cart.length) { body.innerHTML = `<div class="cart-empty"><div class="cart-icon">&#128722;</div><div class="cart-text">Cart is empty</div></div>`; return; }
+    body.innerHTML = cart.map((item,idx) => `
       <div class="cart-item-row">
         <div class="cart-item-name">${item.product_name} <span style="font-size:10px;color:var(--text-muted);">(${item.sale_unit})</span></div>
         <input type="number" class="cart-item-qty" min="1" max="${item.stock}" value="${item.quantity}" onchange="window._updateCartQty(${idx},this.value)"/>
@@ -233,55 +248,75 @@
       </div>`).join('');
   }
 
-  window._addToCart=function(pid){
-    const p=PRODUCTS.find(x=>x.product_id===pid);
-    if(!p||p.quantity<=0){showToast('Out of stock!','error');return;}
-    const ex=cart.find(c=>c.product_id===pid);
-    if(ex){if(ex.quantity>=ex.stock){showToast(`Max: ${ex.stock}`,'error');return;}ex.quantity++;}
-    else cart.push({
-      product_id:p.product_id,
-      product_name:p.product_name,
-      quantity:1,
-      unit_price:parseFloat(p.price),
-      stock:p.quantity,
-      sale_unit:p.sale_unit?.unit_type||p.unit?.unit_type||'unit',
-      sale_unit_id:p.sale_unit_id||p.unit_id
-    });
+  window._addToCart = function(pid) {
+    const p = PRODUCTS.find(x => x.product_id === pid);
+    if (!p || p.quantity <= 0) { showToast('Out of stock!','error'); return; }
+    const ex = cart.find(c => c.product_id === pid);
+    if (ex) {
+      if (ex.quantity >= ex.stock) { showToast(`Max: ${ex.stock}`,'error'); return; }
+      ex.quantity++;
+    } else {
+      cart.push({
+        product_id:   p.product_id,
+        product_name: p.product_name,
+        quantity:     1,
+        unit_price:   parseFloat(p.price),
+        stock:        p.quantity,
+        sale_unit:    p.sale_unit?.unit_type || p.unit?.unit_type || 'unit',
+        sale_unit_id: p.sale_unit_id || p.unit_id,
+      });
+    }
     renderCart();
   };
-  window._removeCartItem=function(idx){cart.splice(idx,1);renderCart();};
-  window._updateCartQty=function(idx,val){let v=parseInt(val);if(isNaN(v)||v<1)v=1;if(v>cart[idx].stock){v=cart[idx].stock;showToast(`Max: ${cart[idx].stock}`,'error');}cart[idx].quantity=v;renderCart();};
+  window._removeCartItem  = function(idx) { cart.splice(idx,1); renderCart(); };
+  window._updateCartQty   = function(idx,val) {
+    let v = parseInt(val);
+    if (isNaN(v)||v<1) v=1;
+    if (v > cart[idx].stock) { v=cart[idx].stock; showToast(`Max: ${cart[idx].stock}`,'error'); }
+    cart[idx].quantity = v;
+    renderCart();
+  };
 
-  document.getElementById('btn-complete-sale').addEventListener('click',async()=>{
-    const name=document.getElementById('pos-customer-name').value.trim();
-    if(!name){showToast('Enter customer name.','error');return;}
-    if(!cart.length){showToast('Cart is empty.','error');return;}
-    let customerId=null;
-    const {data:ec}=await db.from('customer').select('customer_id').eq('full_name',name).maybeSingle();
-    if(ec){customerId=ec.customer_id;}
-    else{
-      const {data:wt}=await db.from('customer_type').select('customer_type_id').eq('type_name','Walk-in').maybeSingle();
-      const {data:nc}=await db.from('customer').insert({full_name:name,customer_type_id:wt?.customer_type_id||null}).select('customer_id').single();
-      customerId=nc?.customer_id;
+  document.getElementById('btn-complete-sale').addEventListener('click', async () => {
+    const name = document.getElementById('pos-customer-name').value.trim();
+    if (!name)      { showToast('Enter customer name.','error'); return; }
+    if (!cart.length){ showToast('Cart is empty.','error');       return; }
+
+    let customerId = null;
+    const { data:ec } = await db.from('customer').select('customer_id').eq('full_name',name).maybeSingle();
+    if (ec) { customerId = ec.customer_id; }
+    else {
+      const { data:wt } = await db.from('customer_type').select('customer_type_id').eq('type_name','Walk-in').maybeSingle();
+      const { data:nc } = await db.from('customer').insert({ full_name:name, customer_type_id:wt?.customer_type_id||null }).select('customer_id').single();
+      customerId = nc?.customer_id;
     }
-    const total=cartTotal();
-    const today=new Date().toISOString().split('T')[0];
-    const empId=Auth.getUser()?.employee_id||null;
-    const {data:sale,error:sE}=await db.from('sale').insert({sale_date:today,total_amount:total,customer_id:customerId,employee_id:empId}).select('sale_id').single();
-    if(sE){showToast('Error saving sale.','error');return;}
-    const {error:iE}=await db.from('sale_item').insert(cart.map(i=>({
-      sale_id:sale.sale_id,
-      product_id:i.product_id,
-      quantity:i.quantity,
-      unit_price:i.unit_price,
-      unit_id:i.sale_unit_id||null
+
+    const total = cartTotal();
+    const today = new Date().toISOString().split('T')[0];
+    const empId = Auth.getUser()?.employee_id || null;
+
+    const { data:sale, error:sE } = await db.from('sale')
+      .insert({ sale_date:today, total_amount:total, customer_id:customerId, employee_id:empId })
+      .select('sale_id').single();
+    if (sE) { showToast('Error saving sale.','error'); return; }
+
+    const { error:iE } = await db.from('sale_item').insert(cart.map(i => ({
+      sale_id:    sale.sale_id,
+      product_id: i.product_id,
+      quantity:   i.quantity,
+      unit_price: i.unit_price,
+      unit_id:    i.sale_unit_id || null,
     })));
-    if(iE){showToast('Error saving items.','error');return;}
-    document.getElementById('modalSlot').innerHTML=`
+    if (iE) { showToast('Error saving items.','error'); return; }
+
+    document.getElementById('modalSlot').innerHTML = `
       <div class="modal modal-open" id="modal">
         <div class="modal-box" style="max-width:420px;">
           <div class="modal-header"><div class="modal-title" style="color:#4caf50;">&#10003; Sale Complete</div><button class="modal-close" id="mc">&#10005;</button></div>
-          <div style="text-align:center;margin-bottom:14px;"><div style="font-size:13px;color:var(--text-muted);">Sale #${sale.sale_id} &middot; ${today}</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;">${name}</div></div>
+          <div style="text-align:center;margin-bottom:14px;">
+            <div style="font-size:13px;color:var(--text-muted);">Sale #${sale.sale_id} &middot; ${today}</div>
+            <div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;">${name}</div>
+          </div>
           <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:14px;">
             <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);"><th style="padding:5px;text-align:left;">Product</th><th>Qty</th><th style="text-align:right;">Total</th></tr></thead>
             <tbody>${cart.map(i=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 5px;color:#fff;">${i.product_name}</td><td style="text-align:center;">${i.quantity} ${i.sale_unit}</td><td style="text-align:right;color:#4caf50;font-weight:700;">${peso(i.quantity*i.unit_price)}</td></tr>`).join('')}</tbody>
@@ -290,21 +325,29 @@
           <div class="modal-footer"><button class="btn-ghost" id="mc2">Close</button><button class="btn btn-amber" onclick="window.print()">&#128438; Print</button></div>
         </div>
       </div>`;
-    document.getElementById('mc').addEventListener('click',closeModal);
-    document.getElementById('mc2').addEventListener('click',closeModal);
-    cart=[];document.getElementById('pos-customer-name').value='';
-    document.getElementById('pos-sale-id').textContent=`SALE #${Math.floor(Math.random()*9000+1000)}`;
-    renderCart();await loadProducts();showToast(`Sale #${sale.sale_id} saved!`);
+    document.getElementById('mc').addEventListener('click', closeModal);
+    document.getElementById('mc2').addEventListener('click', closeModal);
+    cart = [];
+    document.getElementById('pos-customer-name').value = '';
+    document.getElementById('pos-sale-id').textContent = `SALE #${Math.floor(Math.random()*9000+1000)}`;
+    renderCart();
+    await loadProducts();
+    showToast(`Sale #${sale.sale_id} saved!`);
   });
 
-  document.getElementById('btn-clear-cart').addEventListener('click',()=>{cart=[];renderCart();document.getElementById('pos-customer-name').value='';});
+  document.getElementById('btn-clear-cart').addEventListener('click', () => {
+    cart = []; renderCart();
+    document.getElementById('pos-customer-name').value = '';
+  });
 
-  async function loadSalesHistory(){
-    const {data}=await db.from('sale').select('sale_id,sale_date,total_amount,customer(full_name),sale_item(sale_item_id,quantity,unit_price,product(product_name),unit:unit_id(unit_type))').order('sale_date',{ascending:false}).order('sale_id',{ascending:false}).limit(50);
-    SALES_HISTORY=data||[];
-    const tbody=document.getElementById('sales-history-tbody');
-    if(!SALES_HISTORY.length){tbody.innerHTML=`<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No sales found.</td></tr>`;return;}
-    tbody.innerHTML=SALES_HISTORY.map(s=>`
+  async function loadSalesHistory() {
+    const { data } = await db.from('sale')
+      .select('sale_id,sale_date,total_amount,customer(full_name),sale_item(sale_item_id,quantity,unit_price,product(product_name),unit:unit_id(unit_type))')
+      .order('sale_date',{ ascending:false }).order('sale_id',{ ascending:false }).limit(50);
+    SALES_HISTORY = data||[];
+    const tbody = document.getElementById('sales-history-tbody');
+    if (!SALES_HISTORY.length) { tbody.innerHTML = `<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No sales found.</td></tr>`; return; }
+    tbody.innerHTML = SALES_HISTORY.map(s => `
       <tr onclick="window._toggleDetail(${s.sale_id})" style="cursor:pointer;">
         <td><span id="chev-${s.sale_id}" style="color:var(--text-muted);font-size:14px;display:inline-block;">&#8250;</span></td>
         <td><span class="sale-row-id">#${s.sale_id}</span></td>
@@ -325,18 +368,18 @@
       </tr>`).join('');
   }
 
-  window._toggleDetail=function(sid){
-    const el=document.getElementById(`detail-${sid}`);
-    const chev=document.getElementById(`chev-${sid}`);
-    if(!el)return;
-    const open=el.style.display==='none';
-    el.style.display=open?'block':'none';
-    if(chev)chev.textContent=open?'&#8964;':'&#8250;';
+  window._toggleDetail = function(sid) {
+    const el   = document.getElementById(`detail-${sid}`);
+    const chev = document.getElementById(`chev-${sid}`);
+    if (!el) return;
+    const open = el.style.display === 'none';
+    el.style.display = open ? 'block' : 'none';
+    if (chev) chev.textContent = open ? '&#8964;' : '&#8250;';
   };
 
-  function openAddModal(){
-    if (!isManager) { showToast('Access restricted.', 'error'); return; }
-    document.getElementById('modalSlot').innerHTML=`
+  function openAddModal() {
+    if (!isManager) { showToast('Access restricted.','error'); return; }
+    document.getElementById('modalSlot').innerHTML = `
       <div class="modal modal-open" id="modal">
         <div class="modal-box">
           <div class="modal-header"><div class="modal-title">&#128230; Add Product</div><button class="modal-close" id="mc">&#10005;</button></div>
@@ -358,11 +401,11 @@
                     <select class="form-input" id="f-purchase-unit">${UNITS.map(u=>`<option value="${u.unit_id}">${u.unit_type}</option>`).join('')}</select>
                   </div>
                   <div class="form-group" style="margin:0;">
-                    <label class="form-label">Conversion <span style="font-size:10px;color:var(--text-muted);">(1 purchase unit = ? sale units)</span></label>
+                    <label class="form-label">Conversion <span style="font-size:10px;color:var(--text-muted);">(1 purchase = ? sale units)</span></label>
                     <input class="form-input" id="f-conversion" type="number" min="0.0001" step="any" value="1" required/>
                   </div>
                 </div>
-                <div id="conversion-hint" style="font-size:11px;color:var(--text-muted);margin-top:8px;">e.g. 1 Kilo = 1000 Grams → set Sale Unit: Grams, Purchase Unit: Kilos, Conversion: 1000</div>
+                <div id="conversion-hint" style="font-size:11px;color:var(--text-muted);margin-top:8px;">e.g. 1 Kilo = 1000 Grams → Sale Unit: Grams, Purchase Unit: Kilos, Conversion: 1000</div>
               </div>
 
               <div class="form-group"><label class="form-label">Price <span style="font-size:10px;color:var(--text-muted);">(per sale unit)</span></label><input class="form-input" id="f-price" type="number" min="0" step="0.01" placeholder="0.00" required/></div>
@@ -373,59 +416,58 @@
           </form>
         </div>
       </div>`;
-    document.getElementById('mc').addEventListener('click',closeModal);
-    document.getElementById('mc2').addEventListener('click',closeModal);
-    document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+    document.getElementById('mc').addEventListener('click', closeModal);
+    document.getElementById('mc2').addEventListener('click', closeModal);
+    document.getElementById('modal').addEventListener('click', e => { if (e.target.id==='modal') closeModal(); });
 
-    // Live conversion hint
     function updateHint() {
       const saleEl = document.getElementById('f-sale-unit');
-      const purEl = document.getElementById('f-purchase-unit');
+      const purEl  = document.getElementById('f-purchase-unit');
       const convEl = document.getElementById('f-conversion');
-      const hint = document.getElementById('conversion-hint');
+      const hint   = document.getElementById('conversion-hint');
       const saleText = saleEl.options[saleEl.selectedIndex]?.text || '';
-      const purText = purEl.options[purEl.selectedIndex]?.text || '';
-      const conv = parseFloat(convEl.value)||1;
+      const purText  = purEl.options[purEl.selectedIndex]?.text  || '';
+      const conv     = parseFloat(convEl.value) || 1;
       hint.textContent = `1 ${purText} = ${conv} ${saleText} → stock is tracked in ${saleText}`;
     }
     document.getElementById('f-sale-unit').addEventListener('change', updateHint);
     document.getElementById('f-purchase-unit').addEventListener('change', updateHint);
     document.getElementById('f-conversion').addEventListener('input', updateHint);
 
-    document.getElementById('mf').addEventListener('submit',async function(e){
+    document.getElementById('mf').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const saleUnitId = parseInt(document.getElementById('f-sale-unit').value);
-      const purchaseUnitId = parseInt(document.getElementById('f-purchase-unit').value);
-      const conversionFactor = parseFloat(document.getElementById('f-conversion').value)||1;
-      const payload={
-        product_name:document.getElementById('f-name').value.trim(),
-        category_id:parseInt(document.getElementById('f-cat').value),
-        brand_id:parseInt(document.getElementById('f-brand').value),
-        unit_id:saleUnitId,           // keep unit_id = sale unit for backward compat
-        sale_unit_id:saleUnitId,
-        purchase_unit_id:purchaseUnitId,
-        conversion_factor:conversionFactor,
-        price:parseFloat(document.getElementById('f-price').value),
-        quantity:parseInt(document.getElementById('f-qty').value),
-        reorder_level:parseInt(document.getElementById('f-reorder').value)
+      const saleUnitId      = parseInt(document.getElementById('f-sale-unit').value);
+      const purchaseUnitId  = parseInt(document.getElementById('f-purchase-unit').value);
+      const conversionFactor= parseFloat(document.getElementById('f-conversion').value) || 1;
+      const payload = {
+        product_name:      document.getElementById('f-name').value.trim(),
+        category_id:       parseInt(document.getElementById('f-cat').value),
+        brand_id:          parseInt(document.getElementById('f-brand').value),
+        unit_id:           saleUnitId,
+        sale_unit_id:      saleUnitId,
+        purchase_unit_id:  purchaseUnitId,
+        conversion_factor: conversionFactor,
+        price:             parseFloat(document.getElementById('f-price').value),
+        quantity:          parseInt(document.getElementById('f-qty').value),
+        reorder_level:     parseInt(document.getElementById('f-reorder').value),
       };
-      const {error}=await db.from('product').insert(payload);
-      if(error){showToast('Error: '+error.message,'error');return;}
-      closeModal();await loadProducts();showToast(`"${payload.product_name}" added!`);
+      const { error } = await db.from('product').insert(payload);
+      if (error) { showToast('Error: '+error.message,'error'); return; }
+      closeModal(); await loadProducts(); showToast(`"${payload.product_name}" added!`);
     });
   }
 
-  window._openRestockModal=function(pid){
-    if (!isManager) { showToast('Access restricted.', 'error'); return; }
-    const p=PRODUCTS.find(x=>x.product_id===pid);
-    if(!p)return;
-    const today=new Date().toISOString().split('T')[0];
-    const saleUnit = p.sale_unit?.unit_type || p.unit?.unit_type || 'units';
+  window._openRestockModal = function(pid) {
+    if (!isManager) { showToast('Access restricted.','error'); return; }
+    const p = PRODUCTS.find(x => x.product_id === pid);
+    if (!p) return;
+    const today        = new Date().toISOString().split('T')[0];
+    const saleUnit     = p.sale_unit?.unit_type     || p.unit?.unit_type || 'units';
     const purchaseUnit = p.purchase_unit?.unit_type || p.unit?.unit_type || 'units';
-    const convFactor = parseFloat(p.conversion_factor)||1;
-    const hasDualUnit = saleUnit !== purchaseUnit;
+    const convFactor   = parseFloat(p.conversion_factor) || 1;
+    const hasDualUnit  = saleUnit !== purchaseUnit;
 
-    document.getElementById('modalSlot').innerHTML=`
+    document.getElementById('modalSlot').innerHTML = `
       <div class="modal modal-open" id="modal">
         <div class="modal-box">
           <div class="modal-header"><div class="modal-title">&#9881; Adjust Stock</div><button class="modal-close" id="mc">&#10005;</button></div>
@@ -453,7 +495,10 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Supplier</label>
-                <select class="form-input" id="f-sup"><option value="">— Select —</option>${SUPPLIERS.map(s=>`<option value="${s.supplier_id}">${s.supplier_name}</option>`).join('')}</select>
+                <select class="form-input" id="f-sup">
+                  <option value="">— Select —</option>
+                  ${SUPPLIERS.map(s=>`<option value="${s.supplier_id}">${s.supplier_name}</option>`).join('')}
+                </select>
               </div>
               <div class="form-group" style="grid-column:1/-1;">
                 <label class="form-label">Date</label>
@@ -464,55 +509,61 @@
           </form>
         </div>
       </div>`;
-    document.getElementById('mc').addEventListener('click',closeModal);
-    document.getElementById('mc2').addEventListener('click',closeModal);
-    document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+    document.getElementById('mc').addEventListener('click', closeModal);
+    document.getElementById('mc2').addEventListener('click', closeModal);
+    document.getElementById('modal').addEventListener('click', e => { if (e.target.id==='modal') closeModal(); });
 
-    // Live preview: show how many sale units will be added
     document.getElementById('f-qty-purchase').addEventListener('input', function() {
-      const val = parseFloat(this.value)||0;
+      const val            = parseFloat(this.value) || 0;
       const addedSaleUnits = val * convFactor;
-      document.getElementById('f-qty-preview').value = `+${addedSaleUnits % 1 === 0 ? addedSaleUnits : addedSaleUnits.toFixed(3)} ${saleUnit}`;
+      document.getElementById('f-qty-preview').value =
+        `+${addedSaleUnits % 1 === 0 ? addedSaleUnits : addedSaleUnits.toFixed(3)} ${saleUnit}`;
     });
 
-    document.getElementById('mf').addEventListener('submit',async function(e){
+    document.getElementById('mf').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const qtyPurchased = parseFloat(document.getElementById('f-qty-purchase').value);
-      const qtyInSaleUnits = Math.round(qtyPurchased * convFactor); // stored in sale units
-      const cost = parseFloat(document.getElementById('f-cost').value);
-      const suppId = document.getElementById('f-sup').value;
-      const date = document.getElementById('f-date').value;
-      if(!suppId){showToast('Select a supplier.','error');return;}
-      const empId=Auth.getUser()?.employee_id||null;
-      const {data:supply,error:sE}=await db.from('supply').insert({
-        supply_date:date,
-        total_amount:qtyPurchased*cost,
-        supplier_id:parseInt(suppId),
-        employee_id:empId
+      const qtyPurchased   = parseFloat(document.getElementById('f-qty-purchase').value);
+      const qtyInSaleUnits = Math.round(qtyPurchased * convFactor);
+      const cost           = parseFloat(document.getElementById('f-cost').value);
+      const suppId         = document.getElementById('f-sup').value;
+      const date           = document.getElementById('f-date').value;
+      if (!suppId) { showToast('Select a supplier.','error'); return; }
+      const empId = Auth.getUser()?.employee_id || null;
+
+      const { data:supply, error:sE } = await db.from('supply').insert({
+        supply_date:  date,
+        total_amount: qtyPurchased * cost,
+        supplier_id:  parseInt(suppId),
+        employee_id:  empId,
       }).select('supply_id').single();
-      if(sE){showToast('Error: '+sE.message,'error');return;}
-      // Save supply_item with purchase qty and purchase unit
+      if (sE) { showToast('Error: '+sE.message,'error'); return; }
+
       await db.from('supply_item').insert({
-        supply_id:supply.supply_id,
-        product_id:p.product_id,
-        quantity:qtyPurchased,        // quantity in purchase units (e.g. 5 kilos)
-        unit_price:cost,
-        unit_id:p.purchase_unit_id||p.unit_id  // purchase unit
+        supply_id:  supply.supply_id,
+        product_id: p.product_id,
+        quantity:   qtyPurchased,
+        unit_price: cost,
+        unit_id:    p.purchase_unit_id || p.unit_id,
       });
-      // Update product stock in sale units (e.g. 5 kilos × 1000 = 5000 grams)
-      const {error:uE}=await db.from('product').update({quantity:p.quantity+qtyInSaleUnits}).eq('product_id',p.product_id);
-      if(uE){showToast('Error updating stock.','error');return;}
-      closeModal();await loadProducts();showToast(`+${qtyPurchased} ${purchaseUnit} (${qtyInSaleUnits} ${saleUnit}) added!`);
+
+      const { error:uE } = await db.from('product')
+        .update({ quantity: p.quantity + qtyInSaleUnits })
+        .eq('product_id', p.product_id);
+      if (uE) { showToast('Error updating stock.','error'); return; }
+
+      closeModal();
+      await loadProducts();
+      showToast(`+${qtyPurchased} ${purchaseUnit} (${qtyInSaleUnits} ${saleUnit}) added!`);
     });
   };
 
   const btnAddProduct = document.getElementById('btn-add-product');
   if (btnAddProduct) btnAddProduct.addEventListener('click', openAddModal);
 
-  document.getElementById('search-products').addEventListener('input',applyProductFilters);
-  document.getElementById('filter-category').addEventListener('change',applyProductFilters);
-  document.getElementById('filter-stock').addEventListener('change',applyProductFilters);
-  document.getElementById('pos-search').addEventListener('input',filterPosGrid);
+  document.getElementById('search-products').addEventListener('input', applyProductFilters);
+  document.getElementById('filter-category').addEventListener('change', applyProductFilters);
+  document.getElementById('filter-stock').addEventListener('change',    applyProductFilters);
+  document.getElementById('pos-search').addEventListener('input',       filterPosGrid);
 
   await loadLookups();
   await loadProducts();
