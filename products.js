@@ -13,7 +13,6 @@
   let cart = [], SALES_HISTORY = [];
   let activeCategory = 'ALL';
 
-  // ✅ Role check — Cashiers cannot add products or adjust stock
   const currentUser = Auth.getUser();
   const isManager = currentUser.role === 'Manager';
 
@@ -50,9 +49,9 @@
         <div class="table-wrap">
           <table class="product-list-table">
             <thead><tr>
-              <th style="width:${isManager ? '55%' : '65%'};">Product</th>
-              <th style="width:${isManager ? '25%' : '35%'};">Stock</th>
-              ${isManager ? `<th style="width:20%;">Action</th>` : ''}
+              <th style="width:${isManager ? '45%' : '55%'};">Product</th>
+              <th style="width:${isManager ? '30%' : '45%'};">Stock</th>
+              ${isManager ? `<th style="width:25%;">Action</th>` : ''}
             </tr></thead>
             <tbody id="product-tbody"><tr><td colspan="${isManager ? 3 : 2}" class="td-muted" style="text-align:center;padding:32px;">Loading...</td></tr></tbody>
           </table>
@@ -133,14 +132,16 @@
   }
 
   async function loadProducts() {
-    const { data } = await db.from('product').select('*, category(category_name), brand(brand_name), unit(unit_type)').order('product_name');
+    const { data } = await db.from('product')
+      .select('*, category(category_name), brand(brand_name), unit(unit_type), sale_unit:sale_unit_id(unit_type), purchase_unit:purchase_unit_id(unit_type)')
+      .order('product_name');
     PRODUCTS = data||[]; filteredProducts=[...PRODUCTS]; posFiltered=[...PRODUCTS];
     renderProductTable(); renderPosGrid();
     document.getElementById('pos-sale-id').textContent = `SALE #${Math.floor(Math.random()*9000+1000)}`;
   }
 
   function applyProductFilters() {
-    const q=( document.getElementById('search-products')?.value||'').toLowerCase();
+    const q=(document.getElementById('search-products')?.value||'').toLowerCase();
     const cat=document.getElementById('filter-category')?.value||'';
     const stk=document.getElementById('filter-stock')?.value||'';
     filteredProducts=PRODUCTS.filter(p=>{
@@ -158,13 +159,27 @@
     return `<span class="badge badge-in-stock">In Stock</span>`;
   }
 
+  // Helper: get unit label for display
+  function unitLabel(p) {
+    const saleUnit = p.sale_unit?.unit_type || p.unit?.unit_type || 'units';
+    const purchaseUnit = p.purchase_unit?.unit_type || p.unit?.unit_type || 'units';
+    if (saleUnit !== purchaseUnit) return `<span style="font-size:10px;color:var(--amber);margin-left:4px;">sell:${saleUnit} / buy:${purchaseUnit} (×${p.conversion_factor||1})</span>`;
+    return `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">${saleUnit}</span>`;
+  }
+
   function renderProductTable() {
     document.getElementById('catalog-count').textContent = `${filteredProducts.length} of ${PRODUCTS.length} products`;
     document.getElementById('product-tbody').innerHTML = !filteredProducts.length
       ? `<tr><td colspan="${isManager ? 3 : 2}" class="td-muted" style="text-align:center;padding:32px;">No products found.</td></tr>`
       : filteredProducts.map(p=>`<tr>
-          <td class="product-name-cell"><div class="pname">${p.product_name}</div><div class="pprice">${peso(p.price)}</div></td>
-          <td class="product-stock-cell"><div class="stock-num">${p.quantity}</div>${stockBadge(p)}</td>
+          <td class="product-name-cell">
+            <div class="pname">${p.product_name}</div>
+            <div class="pprice">${peso(p.price)} ${unitLabel(p)}</div>
+          </td>
+          <td class="product-stock-cell">
+            <div class="stock-num">${p.quantity} <span style="font-size:11px;color:var(--text-muted);">${p.sale_unit?.unit_type||p.unit?.unit_type||''}</span></div>
+            ${stockBadge(p)}
+          </td>
           ${isManager ? `<td><button class="btn-adjust" onclick="window._openRestockModal(${p.product_id})">&#9881; Adjust</button></td>` : ''}
         </tr>`).join('');
   }
@@ -197,8 +212,8 @@
         <div class="pos-product-category">${p.category?.category_name||''}</div>
         <div class="pos-product-name">${p.product_name}</div>
         <div class="pos-product-footer">
-          <div class="pos-product-price">${peso(p.price)}</div>
-          <div class="pos-product-stock">${p.quantity}</div>
+          <div class="pos-product-price">${peso(p.price)}<span style="font-size:9px;color:var(--text-muted);margin-left:2px;">/${p.sale_unit?.unit_type||p.unit?.unit_type||'unit'}</span></div>
+          <div class="pos-product-stock">${p.quantity} ${p.sale_unit?.unit_type||p.unit?.unit_type||''}</div>
         </div>
       </div>`).join('');
   }
@@ -211,7 +226,7 @@
     if(!cart.length){body.innerHTML=`<div class="cart-empty"><div class="cart-icon">&#128722;</div><div class="cart-text">Cart is empty</div></div>`;return;}
     body.innerHTML=cart.map((item,idx)=>`
       <div class="cart-item-row">
-        <div class="cart-item-name">${item.product_name}</div>
+        <div class="cart-item-name">${item.product_name} <span style="font-size:10px;color:var(--text-muted);">(${item.sale_unit})</span></div>
         <input type="number" class="cart-item-qty" min="1" max="${item.stock}" value="${item.quantity}" onchange="window._updateCartQty(${idx},this.value)"/>
         <div class="cart-item-total">${peso(item.quantity*item.unit_price)}</div>
         <button class="cart-item-remove" onclick="window._removeCartItem(${idx})">&#10005;</button>
@@ -223,7 +238,15 @@
     if(!p||p.quantity<=0){showToast('Out of stock!','error');return;}
     const ex=cart.find(c=>c.product_id===pid);
     if(ex){if(ex.quantity>=ex.stock){showToast(`Max: ${ex.stock}`,'error');return;}ex.quantity++;}
-    else cart.push({product_id:p.product_id,product_name:p.product_name,quantity:1,unit_price:parseFloat(p.price),stock:p.quantity});
+    else cart.push({
+      product_id:p.product_id,
+      product_name:p.product_name,
+      quantity:1,
+      unit_price:parseFloat(p.price),
+      stock:p.quantity,
+      sale_unit:p.sale_unit?.unit_type||p.unit?.unit_type||'unit',
+      sale_unit_id:p.sale_unit_id||p.unit_id
+    });
     renderCart();
   };
   window._removeCartItem=function(idx){cart.splice(idx,1);renderCart();};
@@ -246,7 +269,13 @@
     const empId=Auth.getUser()?.employee_id||null;
     const {data:sale,error:sE}=await db.from('sale').insert({sale_date:today,total_amount:total,customer_id:customerId,employee_id:empId}).select('sale_id').single();
     if(sE){showToast('Error saving sale.','error');return;}
-    const {error:iE}=await db.from('sale_item').insert(cart.map(i=>({sale_id:sale.sale_id,product_id:i.product_id,quantity:i.quantity,unit_price:i.unit_price})));
+    const {error:iE}=await db.from('sale_item').insert(cart.map(i=>({
+      sale_id:sale.sale_id,
+      product_id:i.product_id,
+      quantity:i.quantity,
+      unit_price:i.unit_price,
+      unit_id:i.sale_unit_id||null
+    })));
     if(iE){showToast('Error saving items.','error');return;}
     document.getElementById('modalSlot').innerHTML=`
       <div class="modal modal-open" id="modal">
@@ -255,7 +284,7 @@
           <div style="text-align:center;margin-bottom:14px;"><div style="font-size:13px;color:var(--text-muted);">Sale #${sale.sale_id} &middot; ${today}</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;">${name}</div></div>
           <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:14px;">
             <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);"><th style="padding:5px;text-align:left;">Product</th><th>Qty</th><th style="text-align:right;">Total</th></tr></thead>
-            <tbody>${cart.map(i=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 5px;color:#fff;">${i.product_name}</td><td style="text-align:center;">${i.quantity}</td><td style="text-align:right;color:#4caf50;font-weight:700;">${peso(i.quantity*i.unit_price)}</td></tr>`).join('')}</tbody>
+            <tbody>${cart.map(i=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 5px;color:#fff;">${i.product_name}</td><td style="text-align:center;">${i.quantity} ${i.sale_unit}</td><td style="text-align:right;color:#4caf50;font-weight:700;">${peso(i.quantity*i.unit_price)}</td></tr>`).join('')}</tbody>
           </table>
           <div style="display:flex;justify-content:space-between;padding:10px 5px;border-top:1px solid var(--border);margin-bottom:16px;"><strong>Total</strong><strong style="color:#4caf50;font-size:18px;">${peso(total)}</strong></div>
           <div class="modal-footer"><button class="btn-ghost" id="mc2">Close</button><button class="btn btn-amber" onclick="window.print()">&#128438; Print</button></div>
@@ -271,7 +300,7 @@
   document.getElementById('btn-clear-cart').addEventListener('click',()=>{cart=[];renderCart();document.getElementById('pos-customer-name').value='';});
 
   async function loadSalesHistory(){
-    const {data}=await db.from('sale').select('sale_id,sale_date,total_amount,customer(full_name),sale_item(sale_item_id,quantity,unit_price,product(product_name))').order('sale_date',{ascending:false}).order('sale_id',{ascending:false}).limit(50);
+    const {data}=await db.from('sale').select('sale_id,sale_date,total_amount,customer(full_name),sale_item(sale_item_id,quantity,unit_price,product(product_name),unit:unit_id(unit_type))').order('sale_date',{ascending:false}).order('sale_id',{ascending:false}).limit(50);
     SALES_HISTORY=data||[];
     const tbody=document.getElementById('sales-history-tbody');
     if(!SALES_HISTORY.length){tbody.innerHTML=`<tr><td colspan="5" class="td-muted" style="text-align:center;padding:32px;">No sales found.</td></tr>`;return;}
@@ -288,7 +317,7 @@
           <div id="detail-${s.sale_id}" style="display:none;padding:14px 18px 14px 42px;">
             <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:10px;">
               <thead><tr style="color:var(--text-muted);border-bottom:1px solid var(--border);"><th style="padding:4px 0;text-align:left;">Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr></thead>
-              <tbody>${(s.sale_item||[]).map(si=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:5px 0;color:#fff;">${si.product?.product_name||'?'}</td><td style="text-align:center;">${si.quantity}</td><td style="text-align:right;">${peso(si.unit_price)}</td><td style="text-align:right;color:#4caf50;font-weight:700;">${peso(si.quantity*si.unit_price)}</td></tr>`).join('')}</tbody>
+              <tbody>${(s.sale_item||[]).map(si=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:5px 0;color:#fff;">${si.product?.product_name||'?'}</td><td style="text-align:center;">${si.quantity} ${si.unit?.unit_type||''}</td><td style="text-align:right;">${peso(si.unit_price)}</td><td style="text-align:right;color:#4caf50;font-weight:700;">${peso(si.quantity*si.unit_price)}</td></tr>`).join('')}</tbody>
             </table>
             <button class="btn btn-amber" style="font-size:11px;padding:7px 14px;" onclick="event.stopPropagation();window.location.href='returns.html?sale_id=${s.sale_id}'">&#8617; Process Return</button>
           </div>
@@ -306,7 +335,6 @@
   };
 
   function openAddModal(){
-    // ✅ Extra safety guard — Cashiers should never reach here
     if (!isManager) { showToast('Access restricted.', 'error'); return; }
     document.getElementById('modalSlot').innerHTML=`
       <div class="modal modal-open" id="modal">
@@ -317,10 +345,29 @@
               <div class="form-group" style="grid-column:1/-1;"><label class="form-label">Product Name</label><input class="form-input" id="f-name" type="text" required/></div>
               <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="f-cat">${CATEGORIES.map(c=>`<option value="${c.category_id}">${c.category_name}</option>`).join('')}</select></div>
               <div class="form-group"><label class="form-label">Brand</label><select class="form-input" id="f-brand">${BRANDS.map(b=>`<option value="${b.brand_id}">${b.brand_name}</option>`).join('')}</select></div>
-              <div class="form-group"><label class="form-label">Unit</label><select class="form-input" id="f-unit">${UNITS.map(u=>`<option value="${u.unit_id}">${u.unit_type}</option>`).join('')}</select></div>
-              <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="f-price" type="number" min="0" step="0.01" placeholder="0.00" required/></div>
-              <div class="form-group"><label class="form-label">Initial Qty</label><input class="form-input" id="f-qty" type="number" min="0" placeholder="0" required/></div>
-              <div class="form-group"><label class="form-label">Reorder Level</label><input class="form-input" id="f-reorder" type="number" min="0" placeholder="0" required/></div>
+
+              <div class="form-group" style="grid-column:1/-1;background:#1a1a1a;border:1px solid rgba(245,166,35,0.2);border-radius:8px;padding:12px;">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--amber);margin-bottom:10px;">Unit Settings</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Sale Unit <span style="font-size:10px;color:var(--text-muted);">(sell to customer)</span></label>
+                    <select class="form-input" id="f-sale-unit">${UNITS.map(u=>`<option value="${u.unit_id}">${u.unit_type}</option>`).join('')}</select>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Purchase Unit <span style="font-size:10px;color:var(--text-muted);">(buy from supplier)</span></label>
+                    <select class="form-input" id="f-purchase-unit">${UNITS.map(u=>`<option value="${u.unit_id}">${u.unit_type}</option>`).join('')}</select>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Conversion <span style="font-size:10px;color:var(--text-muted);">(1 purchase unit = ? sale units)</span></label>
+                    <input class="form-input" id="f-conversion" type="number" min="0.0001" step="any" value="1" required/>
+                  </div>
+                </div>
+                <div id="conversion-hint" style="font-size:11px;color:var(--text-muted);margin-top:8px;">e.g. 1 Kilo = 1000 Grams → set Sale Unit: Grams, Purchase Unit: Kilos, Conversion: 1000</div>
+              </div>
+
+              <div class="form-group"><label class="form-label">Price <span style="font-size:10px;color:var(--text-muted);">(per sale unit)</span></label><input class="form-input" id="f-price" type="number" min="0" step="0.01" placeholder="0.00" required/></div>
+              <div class="form-group"><label class="form-label">Initial Qty <span style="font-size:10px;color:var(--text-muted);">(in sale units)</span></label><input class="form-input" id="f-qty" type="number" min="0" placeholder="0" required/></div>
+              <div class="form-group"><label class="form-label">Reorder Level <span style="font-size:10px;color:var(--text-muted);">(in sale units)</span></label><input class="form-input" id="f-reorder" type="number" min="0" placeholder="0" required/></div>
             </div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Save Product</button></div>
           </form>
@@ -329,36 +376,90 @@
     document.getElementById('mc').addEventListener('click',closeModal);
     document.getElementById('mc2').addEventListener('click',closeModal);
     document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+    // Live conversion hint
+    function updateHint() {
+      const saleEl = document.getElementById('f-sale-unit');
+      const purEl = document.getElementById('f-purchase-unit');
+      const convEl = document.getElementById('f-conversion');
+      const hint = document.getElementById('conversion-hint');
+      const saleText = saleEl.options[saleEl.selectedIndex]?.text || '';
+      const purText = purEl.options[purEl.selectedIndex]?.text || '';
+      const conv = parseFloat(convEl.value)||1;
+      hint.textContent = `1 ${purText} = ${conv} ${saleText} → stock is tracked in ${saleText}`;
+    }
+    document.getElementById('f-sale-unit').addEventListener('change', updateHint);
+    document.getElementById('f-purchase-unit').addEventListener('change', updateHint);
+    document.getElementById('f-conversion').addEventListener('input', updateHint);
+
     document.getElementById('mf').addEventListener('submit',async function(e){
       e.preventDefault();
-      const payload={product_name:document.getElementById('f-name').value.trim(),category_id:parseInt(document.getElementById('f-cat').value),brand_id:parseInt(document.getElementById('f-brand').value),unit_id:parseInt(document.getElementById('f-unit').value),price:parseFloat(document.getElementById('f-price').value),quantity:parseInt(document.getElementById('f-qty').value),reorder_level:parseInt(document.getElementById('f-reorder').value)};
+      const saleUnitId = parseInt(document.getElementById('f-sale-unit').value);
+      const purchaseUnitId = parseInt(document.getElementById('f-purchase-unit').value);
+      const conversionFactor = parseFloat(document.getElementById('f-conversion').value)||1;
+      const payload={
+        product_name:document.getElementById('f-name').value.trim(),
+        category_id:parseInt(document.getElementById('f-cat').value),
+        brand_id:parseInt(document.getElementById('f-brand').value),
+        unit_id:saleUnitId,           // keep unit_id = sale unit for backward compat
+        sale_unit_id:saleUnitId,
+        purchase_unit_id:purchaseUnitId,
+        conversion_factor:conversionFactor,
+        price:parseFloat(document.getElementById('f-price').value),
+        quantity:parseInt(document.getElementById('f-qty').value),
+        reorder_level:parseInt(document.getElementById('f-reorder').value)
+      };
       const {error}=await db.from('product').insert(payload);
-      if(error){showToast('Error.','error');return;}
+      if(error){showToast('Error: '+error.message,'error');return;}
       closeModal();await loadProducts();showToast(`"${payload.product_name}" added!`);
     });
   }
 
   window._openRestockModal=function(pid){
-    // ✅ Extra safety guard — Cashiers should never reach here
     if (!isManager) { showToast('Access restricted.', 'error'); return; }
     const p=PRODUCTS.find(x=>x.product_id===pid);
     if(!p)return;
     const today=new Date().toISOString().split('T')[0];
+    const saleUnit = p.sale_unit?.unit_type || p.unit?.unit_type || 'units';
+    const purchaseUnit = p.purchase_unit?.unit_type || p.unit?.unit_type || 'units';
+    const convFactor = parseFloat(p.conversion_factor)||1;
+    const hasDualUnit = saleUnit !== purchaseUnit;
+
     document.getElementById('modalSlot').innerHTML=`
       <div class="modal modal-open" id="modal">
         <div class="modal-box">
           <div class="modal-header"><div class="modal-title">&#9881; Adjust Stock</div><button class="modal-close" id="mc">&#10005;</button></div>
           <div style="background:#161616;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;">
             <div style="font-weight:700;color:#fff;">${p.product_name}</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Current stock: <strong style="color:var(--amber);">${p.quantity} units</strong></div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+              Current stock: <strong style="color:var(--amber);">${p.quantity} ${saleUnit}</strong>
+              ${hasDualUnit ? `<span style="margin-left:8px;color:var(--text-muted);">(≈ ${(p.quantity/convFactor).toFixed(3)} ${purchaseUnit})</span>` : ''}
+            </div>
+            ${hasDualUnit ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">1 ${purchaseUnit} = ${convFactor} ${saleUnit}</div>` : ''}
           </div>
           <form id="mf">
-            <div class="form-group"><label class="form-label">Qty to Add</label><input class="form-input" id="f-qty" type="number" min="1" placeholder="50" required/></div>
-            <div class="form-group"><label class="form-label">Unit Cost</label><input class="form-input" id="f-cost" type="number" min="0" step="0.01" placeholder="0.00" required/></div>
-            <div class="form-group"><label class="form-label">Supplier</label>
-              <select class="form-input" id="f-sup"><option value="">— Select —</option>${SUPPLIERS.map(s=>`<option value="${s.supplier_id}">${s.supplier_name}</option>`).join('')}</select>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label class="form-label">Qty Purchased <span style="font-size:10px;color:var(--text-muted);">(in ${purchaseUnit})</span></label>
+                <input class="form-input" id="f-qty-purchase" type="number" min="0.0001" step="any" placeholder="e.g. 5" required/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Will add to stock</label>
+                <input class="form-input" id="f-qty-preview" type="text" readonly style="color:var(--amber);cursor:default;" value="— ${saleUnit}"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Unit Cost <span style="font-size:10px;color:var(--text-muted);">(per ${purchaseUnit})</span></label>
+                <input class="form-input" id="f-cost" type="number" min="0" step="0.01" placeholder="0.00" required/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Supplier</label>
+                <select class="form-input" id="f-sup"><option value="">— Select —</option>${SUPPLIERS.map(s=>`<option value="${s.supplier_id}">${s.supplier_name}</option>`).join('')}</select>
+              </div>
+              <div class="form-group" style="grid-column:1/-1;">
+                <label class="form-label">Date</label>
+                <input class="form-input" id="f-date" type="date" value="${today}" required/>
+              </div>
             </div>
-            <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="f-date" type="date" value="${today}" required/></div>
             <div class="modal-footer"><button type="button" class="btn-ghost" id="mc2">Cancel</button><button type="submit" class="btn btn-amber">Confirm Restock</button></div>
           </form>
         </div>
@@ -366,22 +467,45 @@
     document.getElementById('mc').addEventListener('click',closeModal);
     document.getElementById('mc2').addEventListener('click',closeModal);
     document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+    // Live preview: show how many sale units will be added
+    document.getElementById('f-qty-purchase').addEventListener('input', function() {
+      const val = parseFloat(this.value)||0;
+      const addedSaleUnits = val * convFactor;
+      document.getElementById('f-qty-preview').value = `+${addedSaleUnits % 1 === 0 ? addedSaleUnits : addedSaleUnits.toFixed(3)} ${saleUnit}`;
+    });
+
     document.getElementById('mf').addEventListener('submit',async function(e){
       e.preventDefault();
-      const qty=parseInt(document.getElementById('f-qty').value);
-      const cost=parseFloat(document.getElementById('f-cost').value);
-      const suppId=document.getElementById('f-sup').value;
-      const date=document.getElementById('f-date').value;
+      const qtyPurchased = parseFloat(document.getElementById('f-qty-purchase').value);
+      const qtyInSaleUnits = Math.round(qtyPurchased * convFactor); // stored in sale units
+      const cost = parseFloat(document.getElementById('f-cost').value);
+      const suppId = document.getElementById('f-sup').value;
+      const date = document.getElementById('f-date').value;
       if(!suppId){showToast('Select a supplier.','error');return;}
       const empId=Auth.getUser()?.employee_id||null;
-      const {data:supply,error:sE}=await db.from('supply').insert({supply_date:date,total_amount:qty*cost,supplier_id:parseInt(suppId),employee_id:empId}).select('supply_id').single();
-      if(sE){showToast('Error.','error');return;}
-      await db.from('supply_item').insert({supply_id:supply.supply_id,product_id:p.product_id,quantity:qty,unit_price:cost});
-      closeModal();await loadProducts();showToast(`+${qty} units added!`);
+      const {data:supply,error:sE}=await db.from('supply').insert({
+        supply_date:date,
+        total_amount:qtyPurchased*cost,
+        supplier_id:parseInt(suppId),
+        employee_id:empId
+      }).select('supply_id').single();
+      if(sE){showToast('Error: '+sE.message,'error');return;}
+      // Save supply_item with purchase qty and purchase unit
+      await db.from('supply_item').insert({
+        supply_id:supply.supply_id,
+        product_id:p.product_id,
+        quantity:qtyPurchased,        // quantity in purchase units (e.g. 5 kilos)
+        unit_price:cost,
+        unit_id:p.purchase_unit_id||p.unit_id  // purchase unit
+      });
+      // Update product stock in sale units (e.g. 5 kilos × 1000 = 5000 grams)
+      const {error:uE}=await db.from('product').update({quantity:p.quantity+qtyInSaleUnits}).eq('product_id',p.product_id);
+      if(uE){showToast('Error updating stock.','error');return;}
+      closeModal();await loadProducts();showToast(`+${qtyPurchased} ${purchaseUnit} (${qtyInSaleUnits} ${saleUnit}) added!`);
     });
   };
 
-  // ✅ Only attach btn-add-product listener if button exists (Managers only)
   const btnAddProduct = document.getElementById('btn-add-product');
   if (btnAddProduct) btnAddProduct.addEventListener('click', openAddModal);
 
